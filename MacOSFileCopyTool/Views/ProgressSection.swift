@@ -1,23 +1,24 @@
 import SwiftUI
 
 /// Shows the progress bar, current-file status line, and copied/skipped/error counters.
+/// In dry-run (preview) mode the labels change to "Would Copy", "Would Delete", etc.
 struct ProgressSection: View {
 
     let progress:      Double
     let statusMessage: String
     let copiedCount:   Int
     let skippedCount:  Int
+    let warningCount:  Int
     let deletedCount:  Int
     let errorCount:    Int
+    var isDryRun:      Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
 
-            // Progress bar
             ProgressView(value: progress)
                 .progressViewStyle(.linear)
 
-            // Current file being processed
             Text(statusMessage)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundColor(.secondary)
@@ -25,17 +26,30 @@ struct ProgressSection: View {
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Counters
             HStack(spacing: 20) {
-                Label("\(copiedCount) Copied", systemImage: "checkmark.circle.fill")
-                    .foregroundColor(.green)
+                Label(
+                    isDryRun ? "\(copiedCount) Would Copy" : "\(copiedCount) Copied",
+                    systemImage: isDryRun ? "doc.badge.arrow.up" : "checkmark.circle.fill"
+                )
+                .foregroundColor(isDryRun ? .blue : .green)
 
-                Label("\(skippedCount) Skipped", systemImage: "minus.circle.fill")
-                    .foregroundColor(.secondary)
+                Label(
+                    isDryRun ? "\(skippedCount) Would Skip" : "\(skippedCount) Skipped",
+                    systemImage: "minus.circle.fill"
+                )
+                .foregroundColor(.secondary)
+
+                if warningCount > 0 {
+                    Label("\(warningCount) Warnings", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                }
 
                 if deletedCount > 0 {
-                    Label("\(deletedCount) Deleted", systemImage: "trash.fill")
-                        .foregroundColor(.orange)
+                    Label(
+                        isDryRun ? "\(deletedCount) Would Delete" : "\(deletedCount) Deleted",
+                        systemImage: "trash.fill"
+                    )
+                    .foregroundColor(.orange)
                 }
 
                 Label("\(errorCount) Errors", systemImage: "xmark.circle.fill")

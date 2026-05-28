@@ -59,7 +59,6 @@ struct MirrorConfirmationView: View {
                 Button(orphanPaths.isEmpty ? "Sync" : "Delete and Sync",
                        role: orphanPaths.isEmpty ? nil : .destructive,
                        action: onConfirm)
-                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)

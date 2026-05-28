@@ -1,17 +1,10 @@
 import SwiftUI
 import AppKit
 
-/// Main application window.
-///
-/// Layout strategy:
-/// - Compact on launch: folder pickers + action buttons only.
-/// - Expands automatically (animated) when a sync starts to reveal the
-///   progress section and live copy log.
 struct ContentView: View {
 
     @EnvironmentObject private var vm: FileSyncViewModel
 
-    // Heights used for the two window states — must match AppDelegate constants.
     private let compactHeight:  CGFloat = AppDelegate.compactHeight
     private let expandedHeight: CGFloat = AppDelegate.expandedHeight
 
@@ -27,21 +20,40 @@ struct ContentView: View {
                     FolderPickerRow(label: "Destination:", url: vm.destinationURL) {
                         vm.chooseDestinationFolder()
                     }
+
                     Divider()
+
+                    // All four comparison modes in one unified radio group.
+                    // Uses a binding no-op during sync instead of .disabled() so
+                    // AppKit tooltip tracking areas are never torn down.
                     HStack(spacing: 12) {
                         Text("Compare:")
                             .frame(width: 95, alignment: .trailing)
                             .foregroundColor(.secondary)
-                        Picker("", selection: $vm.comparisonMode) {
+                        Picker("", selection: Binding(
+                            get: { vm.comparisonMode },
+                            set: { if !vm.isRunning { vm.comparisonMode = $0 } }
+                        )) {
                             ForEach(ComparisonMode.allCases, id: \.self) { mode in
                                 Text(mode.label).tag(mode).help(mode.tooltip)
                             }
                         }
                         .pickerStyle(.radioGroup)
                         .horizontalRadioGroupLayout()
-                        .disabled(vm.isRunning)
+                        .opacity(vm.isRunning ? 0.5 : 1.0)
                     }
-                    // Always in layout so GroupBox height is constant; only visible for Mirror.
+
+                    // Thorough performance warning (always in layout; visible only when Thorough is selected).
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("SHA-256 checksums every file on both sides — may be slow on large folders.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .opacity(vm.comparisonMode == .thorough ? 1 : 0)
+
+                    // Mirror warning (always in layout; visible only when Mirror is selected).
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundColor(.orange)
@@ -54,6 +66,28 @@ struct ContentView: View {
                 .padding(4)
             }
 
+            // Bookmark unavailability warnings (shown when a volume is not mounted).
+            if vm.sourceBookmarkUnavailable {
+                HStack(spacing: 6) {
+                    Image(systemName: "externaldrive.badge.exclamationmark")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Text("Source folder unavailable — the volume may not be mounted.")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
+            if vm.destinationBookmarkUnavailable {
+                HStack(spacing: 6) {
+                    Image(systemName: "externaldrive.badge.exclamationmark")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Text("Destination folder unavailable — the volume may not be mounted.")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
+
             // ── Action buttons ────────────────────────────────────────────
             HStack {
                 Button(vm.isScanning ? "Scanning…"
@@ -63,6 +97,12 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!vm.canStartSync)
 
+                Button("Preview") {
+                    vm.startPreview()
+                }
+                .disabled(!vm.canStartSync)
+                .help("Run comparison without copying or deleting any files")
+
                 Spacer()
 
                 Button("Cancel") {
@@ -71,22 +111,23 @@ struct ContentView: View {
                 .disabled(!vm.isRunning)
             }
 
-            // ── Progress (slides in when sync starts) ─────────────────────
+            // ── Progress ──────────────────────────────────────────────────
             if vm.isRunning || vm.isComplete {
-                GroupBox("Progress") {
+                GroupBox(vm.isDryRun ? "Preview" : "Progress") {
                     ProgressSection(
                         progress:      vm.progress,
                         statusMessage: vm.statusMessage,
                         copiedCount:   vm.copiedCount,
                         skippedCount:  vm.skippedCount,
+                        warningCount:  vm.warningCount,
                         deletedCount:  vm.deletedCount,
-                        errorCount:    vm.errorCount
+                        errorCount:    vm.errorCount,
+                        isDryRun:      vm.isDryRun
                     )
                     .padding(4)
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
 
-                // Error banner shown after completion when errors occurred.
                 if vm.isComplete && vm.errorCount > 0 {
                     Label(
                         "\(vm.errorCount) error(s) occurred — see the log for details.",
@@ -100,7 +141,7 @@ struct ContentView: View {
 
             // ── Copy log ──────────────────────────────────────────────────
             if !vm.logEntries.isEmpty {
-                GroupBox("Copy Log") {
+                GroupBox(vm.isDryRun ? "Preview Log" : "Copy Log") {
                     LogView(entries: vm.logEntries)
                         .frame(minHeight: 180)
                 }
@@ -116,29 +157,18 @@ struct ContentView: View {
                 .transition(.opacity)
             }
 
-            // Pushes all content to the top when the window is taller than
-            // the natural content height (e.g. maximised / full-screen).
             Spacer()
         }
         .padding(20)
         .frame(minWidth: 600, minHeight: compactHeight)
-        // Every time a window is created (first launch, red-dot reopen,
-        // File → New Window) reset the ViewModel and shrink to compact.
-        // onAppear fires on a new view hierarchy — it does NOT fire when
-        // an already-open window comes back to the foreground, so an
-        // in-progress sync is never disturbed.
         .onAppear {
             vm.resetForNextSession()
             Task { @MainActor in
                 setWindowHeight(compactHeight, animated: false)
             }
         }
-        // Expand the window the moment a sync begins.
-        .onChange(of: vm.isRunning) { _, isRunning in
+        .onChange(of: vm.isRunning, perform: { isRunning in
             if isRunning {
-                // Skip the resize if the window is already maximised or in
-                // full-screen — let it stay that way. windowDidExitFullScreen
-                // in AppDelegate will pick the right height on the way back out.
                 if let window = NSApp.keyWindow ?? NSApp.windows.first,
                    !window.styleMask.contains(.fullScreen),
                    !window.isZoomed {
@@ -147,7 +177,7 @@ struct ContentView: View {
                     }
                 }
             }
-        }
+        })
         .sheet(isPresented: $vm.pendingMirrorConfirmation) {
             MirrorConfirmationView(
                 orphanPaths: vm.orphanedFiles,
@@ -159,13 +189,10 @@ struct ContentView: View {
 
     // MARK: - Window helpers
 
-    /// Resizes the window to `height`, keeping the top-left corner stationary.
-    /// Uses AppKit's built-in animator for a smooth native macOS feel.
     private func setWindowHeight(_ height: CGFloat, animated: Bool) {
         guard let window = NSApp.keyWindow ?? NSApp.windows.first else { return }
 
         var frame = window.frame
-        // Adjust the Y origin so the top of the window stays fixed.
         frame.origin.y = frame.maxY - height
         frame.size.height = height
 

@@ -2,9 +2,11 @@ import SwiftUI
 
 /// A scrollable, color-coded list of log entries produced during a sync run.
 ///
-/// - Green  → COPIED
-/// - Gray   → SKIPPED
-/// - Red    → ERROR
+/// - Green      → COPIED
+/// - Blue       → WOULD COPY (dry-run preview)
+/// - Gray       → SKIPPED / NOTE
+/// - Orange     → DELETED, WOULD DEL, NEWER DST, SIZE DIFF
+/// - Red        → ERROR
 struct LogView: View {
 
     let entries: [LogEntry]
@@ -29,14 +31,13 @@ struct LogView: View {
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
             )
-            // Auto-scroll to the newest entry as the log grows.
-            .onChange(of: entries.count) {
+            .onChange(of: entries.count, perform: { _ in
                 if let last = entries.last {
                     withAnimation {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
                 }
-            }
+            })
         }
     }
 
@@ -44,10 +45,15 @@ struct LogView: View {
 
     private func rowColor(for action: FileSyncAction) -> Color {
         switch action {
-        case .copied:  return .green
-        case .skipped: return .secondary
-        case .deleted: return .orange
-        case .error:   return .red
+        case .copied(_):        return .green
+        case .wouldCopy(_):     return .blue
+        case .skipped:          return .secondary
+        case .deleted:          return .orange
+        case .wouldDelete:      return .orange
+        case .newerDestination: return .orange
+        case .sizeMismatch:     return .orange
+        case .notice(_):        return .secondary
+        case .error(_):         return .red
         }
     }
 }
