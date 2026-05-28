@@ -65,6 +65,10 @@ xattr checking was removed from Fast mode. On a NAS, extended attributes change 
 **Window height constants on `AppDelegate`**
 `compactHeight` and `expandedHeight` are `static let` on `AppDelegate`, referenced by both `AppDelegate` and `ContentView` (via `AppDelegate.compactHeight`). Adding or removing a permanently-visible row in the folder-picker `GroupBox` requires bumping `compactHeight` to match the new natural content height. Current value: `240`.
 
+`setWindowHeight` sets the **NSWindow frame** height (which includes the title bar). The VStack frame uses `.frame(minWidth: 600)` with no `minHeight` — removing `minHeight` was intentional: passing `compactHeight` as the SwiftUI content minimum height caused SwiftUI to request `compactHeight + ~32px (title bar)` from the window, making the window 32px taller than intended. Without `minHeight`, SwiftUI defers to `setWindowHeight` rather than fighting it.
+
+The outer VStack has no `Spacer()`. A trailing `Spacer()` requests infinite preferred height, which caused SwiftUI to override `setWindowHeight` calls and grow the window. Window sizing is handled entirely by explicit `setWindowHeight` calls in `onAppear` and `onChange(of: vm.isRunning)`.
+
 **xattr filter list**
 `com.apple.quarantine` and `com.apple.lastuseddate#PS` are excluded from xattr comparison. Both are written by macOS automatically (Gatekeeper and Launch Services respectively) without user action; including them would cause spurious copies on every run.
 

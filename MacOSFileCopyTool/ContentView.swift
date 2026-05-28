@@ -159,10 +159,9 @@ struct ContentView: View {
                 .transition(.opacity)
             }
 
-            Spacer()
         }
         .padding(16)
-        .frame(minWidth: 600, minHeight: compactHeight)
+        .frame(minWidth: 600)
         .onAppear {
             vm.resetForNextSession()
             Task { @MainActor in
