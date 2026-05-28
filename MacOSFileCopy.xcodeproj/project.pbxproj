@@ -1,0 +1,405 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA200001000000000000001A /* MacOSFileCopyToolApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001000000000000001A /* MacOSFileCopyToolApp.swift */; };
+		AA200002000000000000001A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100002000000000000001A /* ContentView.swift */; };
+		AA200003000000000000001A /* FolderPickerRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100003000000000000001A /* FolderPickerRow.swift */; };
+		AA200004000000000000001A /* ProgressSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100004000000000000001A /* ProgressSection.swift */; };
+		AA200005000000000000001A /* LogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100005000000000000001A /* LogView.swift */; };
+		AA200006000000000000001A /* FileSyncViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100006000000000000001A /* FileSyncViewModel.swift */; };
+		AA200007000000000000001A /* FileSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100007000000000000001A /* FileSyncEngine.swift */; };
+		AA200008000000000000001A /* BookmarkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008000000000000001A /* BookmarkManager.swift */; };
+		AA20000A000000000000001A /* MirrorConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000A000000000000001A /* MirrorConfirmationView.swift */; };
+		AA200011000000000000001A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA100011000000000000001A /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA100001000000000000001A /* MacOSFileCopyToolApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSFileCopyToolApp.swift; sourceTree = "<group>"; };
+		AA100002000000000000001A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AA100003000000000000001A /* FolderPickerRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPickerRow.swift; sourceTree = "<group>"; };
+		AA100004000000000000001A /* ProgressSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressSection.swift; sourceTree = "<group>"; };
+		AA100005000000000000001A /* LogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogView.swift; sourceTree = "<group>"; };
+		AA100006000000000000001A /* FileSyncViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSyncViewModel.swift; sourceTree = "<group>"; };
+		AA100007000000000000001A /* FileSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSyncEngine.swift; sourceTree = "<group>"; };
+		AA100008000000000000001A /* BookmarkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkManager.swift; sourceTree = "<group>"; };
+		AA100009000000000000001A /* MacOSFileCopyTool.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacOSFileCopyTool.entitlements; sourceTree = "<group>"; };
+		AA10000A000000000000001A /* MirrorConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorConfirmationView.swift; sourceTree = "<group>"; };
+		AA100010000000000000001A /* File Diff Copy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "File Diff Copy.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA100011000000000000001A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA300002000000000000001A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA000001000000000000001A = {
+			isa = PBXGroup;
+			children = (
+				AA000002000000000000001A /* MacOSFileCopyTool */,
+				AA000007000000000000001A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA000002000000000000001A /* MacOSFileCopyTool */ = {
+			isa = PBXGroup;
+			children = (
+				AA100001000000000000001A /* MacOSFileCopyToolApp.swift */,
+				AA100002000000000000001A /* ContentView.swift */,
+				AA000003000000000000001A /* Views */,
+				AA000004000000000000001A /* ViewModel */,
+				AA000005000000000000001A /* Engine */,
+				AA000006000000000000001A /* Utilities */,
+				AA100011000000000000001A /* Assets.xcassets */,
+				AA100009000000000000001A /* MacOSFileCopyTool.entitlements */,
+			);
+			path = MacOSFileCopyTool;
+			sourceTree = "<group>";
+		};
+		AA000003000000000000001A /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AA100003000000000000001A /* FolderPickerRow.swift */,
+				AA100004000000000000001A /* ProgressSection.swift */,
+				AA100005000000000000001A /* LogView.swift */,
+				AA10000A000000000000001A /* MirrorConfirmationView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		AA000004000000000000001A /* ViewModel */ = {
+			isa = PBXGroup;
+			children = (
+				AA100006000000000000001A /* FileSyncViewModel.swift */,
+			);
+			path = ViewModel;
+			sourceTree = "<group>";
+		};
+		AA000005000000000000001A /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				AA100007000000000000001A /* FileSyncEngine.swift */,
+			);
+			path = Engine;
+			sourceTree = "<group>";
+		};
+		AA000006000000000000001A /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				AA100008000000000000001A /* BookmarkManager.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		AA000007000000000000001A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA100010000000000000001A /* File Diff Copy.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA400001000000000000001A /* MacOSFileCopy */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA600002000000000000001A /* Build configuration list for PBXNativeTarget "MacOSFileCopy" */;
+			buildPhases = (
+				AA300001000000000000001A /* Sources */,
+				AA300002000000000000001A /* Frameworks */,
+				AA300003000000000000001A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MacOSFileCopy;
+			productName = MacOSFileCopyTool;
+			productReference = AA100010000000000000001A /* File Diff Copy.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA400002000000000000001A /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					AA400001000000000000001A = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = AA600001000000000000001A /* Build configuration list for PBXProject "MacOSFileCopy" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA000001000000000000001A;
+			productRefGroup = AA000007000000000000001A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA400001000000000000001A /* MacOSFileCopy */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA300003000000000000001A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA200011000000000000001A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA300001000000000000001A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA200001000000000000001A /* MacOSFileCopyToolApp.swift in Sources */,
+				AA200002000000000000001A /* ContentView.swift in Sources */,
+				AA200003000000000000001A /* FolderPickerRow.swift in Sources */,
+				AA200004000000000000001A /* ProgressSection.swift in Sources */,
+				AA200005000000000000001A /* LogView.swift in Sources */,
+				AA200006000000000000001A /* FileSyncViewModel.swift in Sources */,
+				AA200007000000000000001A /* FileSyncEngine.swift in Sources */,
+				AA200008000000000000001A /* BookmarkManager.swift in Sources */,
+				AA20000A000000000000001A /* MirrorConfirmationView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA500001000000000000001A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_CYCLES = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 6HZ82RF7UX;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AA500002000000000000001A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_CYCLES = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 6HZ82RF7UX;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		AA500003000000000000001A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MacOSFileCopyTool/MacOSFileCopyTool.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "File Diff Copy";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableDescription = "Copy files that are newer than the destination.";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.filecopy;
+				PRODUCT_NAME = "File Diff Copy";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA500004000000000000001A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MacOSFileCopyTool/MacOSFileCopyTool.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "File Diff Copy";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableDescription = "Copy files that are newer than the destination.";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.filecopy;
+				PRODUCT_NAME = "File Diff Copy";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA600001000000000000001A /* Build configuration list for PBXProject "MacOSFileCopy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA500001000000000000001A /* Debug */,
+				AA500002000000000000001A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA600002000000000000001A /* Build configuration list for PBXNativeTarget "MacOSFileCopy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA500003000000000000001A /* Debug */,
+				AA500004000000000000001A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA400002000000000000001A /* Project object */;
+}
