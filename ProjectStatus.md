@@ -4,8 +4,11 @@
 | Item | Status |
 |------|--------|
 | Xcode build (Debug) | PASSED — `** BUILD SUCCEEDED **` (2026-05-28) |
+| Xcode build (Release) | PASSED — `** BUILD SUCCEEDED **` (2026-05-28) |
 | App name | **File Diff Copy** (scheme: `MacOSFileCopy`, bundle: `File Diff Copy.app`) |
-| App launch | CONFIRMED — window on-screen, Compare radio group visible |
+| App launch | CONFIRMED — compact window (240px), Compare radio group visible |
+| Release location | `~/Applications/File Diff Copy.app` |
+| Project build copies | `build/Debug/` and `build/Release/` (gitignored) |
 
 ---
 
@@ -77,6 +80,17 @@ Created at `~/Desktop/FileCopyTest/` (2026-05-28). Reset script: `TestFixtures/r
 | 2 | GroupBox title | Shows "Preview" / "Preview Log" | PASS |
 | 3 | Status message | "Preview complete — no files were modified." | PASS |
 | 4 | Counters | Shows "X Would Copy" / "X Would Skip" | PASS |
+
+---
+
+## UI Polish (2026-05-28)
+| Change | Detail |
+|--------|--------|
+| Compact window | `compactHeight` 305→240; outer VStack spacing 14→8, padding 20→16; GroupBox inner spacing 10→6 |
+| Single warning slot | Thorough and Mirror warnings collapsed into one `ZStack` — mutually exclusive, saves one caption row |
+| Spacer removed | Trailing `Spacer()` in outer VStack removed — was fighting `setWindowHeight`, inflating window to ~272px |
+| `minHeight` removed | `.frame(minWidth: 600, minHeight: compactHeight)` → `.frame(minWidth: 600)` — SwiftUI was treating `minHeight` as content-area min, adding title-bar height on top |
+| Deletion color | `[DELETED]` / `[WOULD DEL]` log entries and Deleted counter changed orange → **red**; orange now reserved for anomaly warnings only |
 
 ---
 
