@@ -49,7 +49,7 @@ struct ProgressSection: View {
                         isDryRun ? "\(deletedCount) Would Delete" : "\(deletedCount) Deleted",
                         systemImage: "trash.fill"
                     )
-                    .foregroundColor(.orange)
+                    .foregroundColor(.red)
                 }
 
                 Label("\(errorCount) Errors", systemImage: "xmark.circle.fill")
