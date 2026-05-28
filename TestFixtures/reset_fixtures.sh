@@ -29,8 +29,10 @@ touch -t 202605281500 "$BASE/source/source_newer.txt"
 touch -t 202605271500 "$BASE/destination/source_newer.txt"
 
 # ── 4. DESTINATION NEWER — destination mod date ahead of source (anomaly) ────
-echo "Source has older date." > "$BASE/source/dest_newer.txt"
-echo "Destination was somehow modified after source." > "$BASE/destination/dest_newer.txt"
+# Same content and size in both; only the date differs so Fast mode's size
+# check passes through to anomaly detection and emits [NEWER DST].
+printf "Identical content in both copies." > "$BASE/source/dest_newer.txt"
+printf "Identical content in both copies." > "$BASE/destination/dest_newer.txt"
 touch -t 202605271000 "$BASE/source/dest_newer.txt"
 touch -t 202605281000 "$BASE/destination/dest_newer.txt"
 
