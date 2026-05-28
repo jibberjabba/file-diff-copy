@@ -63,7 +63,7 @@ xattr checking was removed from Fast mode. On a NAS, extended attributes change 
 `.disabled()` on the comparison-mode Picker tears down AppKit tooltip tracking areas, so hover tooltips stop working once a sync starts. The fix: remove `.disabled()` entirely, use a binding that no-ops the setter when `isRunning`, and apply `.opacity(0.5)` for the visual disabled appearance. Tracking areas are never torn down so tooltips always work.
 
 **Window height constants on `AppDelegate`**
-`compactHeight` and `expandedHeight` are `static let` on `AppDelegate`, referenced by both `AppDelegate` and `ContentView` (via `AppDelegate.compactHeight`). Adding or removing a permanently-visible row in the folder-picker `GroupBox` requires bumping `compactHeight` to match the new natural content height. Current value: `305`.
+`compactHeight` and `expandedHeight` are `static let` on `AppDelegate`, referenced by both `AppDelegate` and `ContentView` (via `AppDelegate.compactHeight`). Adding or removing a permanently-visible row in the folder-picker `GroupBox` requires bumping `compactHeight` to match the new natural content height. Current value: `240`.
 
 **xattr filter list**
 `com.apple.quarantine` and `com.apple.lastuseddate#PS` are excluded from xattr comparison. Both are written by macOS automatically (Gatekeeper and Launch Services respectively) without user action; including them would cause spurious copies on every run.

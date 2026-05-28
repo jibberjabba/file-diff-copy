@@ -9,11 +9,11 @@ struct ContentView: View {
     private let expandedHeight: CGFloat = AppDelegate.expandedHeight
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 8) {
 
             // ── Folder pickers ────────────────────────────────────────────
             GroupBox {
-                VStack(spacing: 10) {
+                VStack(spacing: 6) {
                     FolderPickerRow(label: "Source:", url: vm.sourceURL) {
                         vm.chooseSourceFolder()
                     }
@@ -43,25 +43,27 @@ struct ContentView: View {
                         .opacity(vm.isRunning ? 0.5 : 1.0)
                     }
 
-                    // Thorough performance warning (always in layout; visible only when Thorough is selected).
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("SHA-256 checksums every file on both sides — may be slow on large folders.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .opacity(vm.comparisonMode == .thorough ? 1 : 0)
+                    // One layout slot shared by both warnings — only one mode
+                    // can be selected at a time, so they never overlap visually.
+                    ZStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text("SHA-256 checksums every file on both sides — may be slow on large folders.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .opacity(vm.comparisonMode == .thorough ? 1 : 0)
 
-                    // Mirror warning (always in layout; visible only when Mirror is selected).
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("Mirror permanently deletes destination files not in source.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text("Mirror permanently deletes destination files not in source.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .opacity(vm.comparisonMode == .mirror ? 1 : 0)
                     }
-                    .opacity(vm.comparisonMode == .mirror ? 1 : 0)
                 }
                 .padding(4)
             }
@@ -159,7 +161,7 @@ struct ContentView: View {
 
             Spacer()
         }
-        .padding(20)
+        .padding(16)
         .frame(minWidth: 600, minHeight: compactHeight)
         .onAppear {
             vm.resetForNextSession()

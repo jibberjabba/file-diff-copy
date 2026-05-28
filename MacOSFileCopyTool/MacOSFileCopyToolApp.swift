@@ -7,7 +7,7 @@ import AppKit
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
-    static let compactHeight:  CGFloat = 305
+    static let compactHeight:  CGFloat = 240
     static let expandedHeight: CGFloat = 620
 
     /// Weak reference set by MacOSFileCopyToolApp so window lifecycle
