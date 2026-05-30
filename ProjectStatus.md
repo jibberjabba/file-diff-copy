@@ -4,9 +4,11 @@
 | Item | Status |
 |------|--------|
 | Xcode build (Debug) | PASSED — `** BUILD SUCCEEDED **` (2026-05-28) |
-| Xcode build (Release) | PASSED — `** BUILD SUCCEEDED **` (2026-05-28) |
+| Xcode build (Release) | PASSED — `** BUILD SUCCEEDED **` (2026-05-30) |
 | App name | **File Diff Copy** (scheme: `MacOSFileCopy`, bundle: `File Diff Copy.app`) |
-| App launch | CONFIRMED — compact window (240px), Compare radio group visible |
+| App launch | CONFIRMED — compact window (~270px), Compare radio group visible |
+| Deployment target | macOS 13.0 Ventura (lowered from 26.0 on 2026-05-28) |
+| AccentColor warning | Fixed — `AccentColor.colorset` added to `Assets.xcassets` (2026-05-28) |
 | Release location | `~/Applications/File Diff Copy.app` |
 | Project build copies | `build/Debug/` and `build/Release/` (gitignored) |
 
@@ -65,8 +67,8 @@ Created at `~/Desktop/FileCopyTest/` (2026-05-28). Reset script: `TestFixtures/r
 ### Mirror Mode — PASSED (2026-05-28)
 | # | Scenario | Expected | Result |
 |---|----------|----------|--------|
-| 1 | `orphan_file.txt` | `[DELETED]` (orange) | PASS |
-| 2 | `orphan_subdir/orphan_in_dir.txt` | `[DELETED]` (orange) | PASS |
+| 1 | `orphan_file.txt` | `[DELETED]` (red) | PASS |
+| 2 | `orphan_subdir/orphan_in_dir.txt` | `[DELETED]` (red) | PASS |
 | 3 | Orphans removed from disk | Files gone after sync | PASS |
 | 4 | Copy pass | Same results as Fast mode | PASS |
 | 5 | Confirmation sheet | Lists files to delete, shows count | PASS |
@@ -96,8 +98,17 @@ Created at `~/Desktop/FileCopyTest/` (2026-05-28). Reset script: `TestFixtures/r
 
 ## Blockers / Notes
 - Test fixtures are one-shot: once a sync runs, destination state changes. Run `TestFixtures/reset_fixtures.sh` before each isolated mode test.
+- Test results above were recorded on 2026-05-28 against the macOS 26 build. The deployment target was subsequently lowered to macOS 13 and `onChange` syntax was updated. Re-run all fixture tests to confirm results still hold.
+
+---
+
+## Changes (2026-05-30)
+| Change | Detail |
+|--------|--------|
+| Log cap raised | `maxLogEntries` increased from 5,000 → 20,000 entries |
 
 ---
 
 ## Next Steps
-1. Run a real-world sync against a NAS to validate Mirror deletion, Preview mode, xattr comparison, and anomaly detection under network I/O conditions.
+1. Re-run all fixture tests against the macOS 13 build to confirm no regressions.
+2. Run a real-world sync against a NAS to validate Mirror deletion, Preview mode, xattr comparison, and anomaly detection under network I/O conditions.

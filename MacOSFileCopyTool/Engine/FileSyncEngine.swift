@@ -271,7 +271,7 @@ final class FileSyncEngine {
 
     // MARK: - Private helpers
 
-    private static let maxLogEntries = 5_000
+    private static let maxLogEntries = 20_000
 
     private func appendLog(_ entry: LogEntry, to progress: inout SyncProgress) {
         if progress.logEntries.count < Self.maxLogEntries {
