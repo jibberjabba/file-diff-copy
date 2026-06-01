@@ -4,7 +4,7 @@
 | Item | Status |
 |------|--------|
 | Xcode build (Debug) | PASSED — `** BUILD SUCCEEDED **` (2026-05-28) |
-| Xcode build (Release) | PASSED — `** BUILD SUCCEEDED **` (2026-05-30) |
+| Xcode build (Release) | PASSED — `** BUILD SUCCEEDED **` (2026-06-01) |
 | App name | **File Diff Copy** (scheme: `MacOSFileCopy`, bundle: `File Diff Copy.app`) |
 | App launch | CONFIRMED — compact window (~270px), Compare radio group visible |
 | Deployment target | macOS 13.0 Ventura (lowered from 26.0 on 2026-05-28) |
@@ -106,6 +106,14 @@ Created at `~/Desktop/FileCopyTest/` (2026-05-28). Reset script: `TestFixtures/r
 | Change | Detail |
 |--------|--------|
 | Log cap raised | `maxLogEntries` increased from 5,000 → 20,000 entries |
+
+---
+
+## Changes (2026-06-01)
+| Change | Detail |
+|--------|--------|
+| Resize timing fix | Window expansion now deferred until the first `onProgress` fires (`syncHasStarted` flag). Previously expanded immediately on `isRunning = true`, before the engine Task had started, causing a flash of empty content. |
+| Preparing spinner | Start button shows a `ProgressView` spinner + "Preparing…" after 500ms if the engine hasn't reported its first file yet. Covers slow enumeration on large folders or NAS. Clears instantly when processing begins. |
 
 ---
 
