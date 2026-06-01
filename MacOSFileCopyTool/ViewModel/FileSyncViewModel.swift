@@ -16,6 +16,7 @@ final class FileSyncViewModel: ObservableObject {
     @Published var isComplete:     Bool = false
     @Published var isDryRun:       Bool = false
     @Published var syncHasStarted: Bool = false
+    @Published var isPreparing:    Bool = false
     @Published var progress:   Double = 0
     @Published var statusMessage: String = ""
 
@@ -36,8 +37,9 @@ final class FileSyncViewModel: ObservableObject {
 
     // MARK: - Private
 
-    private let engine     = FileSyncEngine()
-    private var activeTask: Task<Void, Never>?
+    private let engine        = FileSyncEngine()
+    private var activeTask:   Task<Void, Never>?
+    private var prepareTimer: Task<Void, Never>?
     private var syncGeneration = 0
 
     // MARK: - Init
@@ -109,6 +111,9 @@ final class FileSyncViewModel: ObservableObject {
         isComplete                = false
         isDryRun                  = false
         syncHasStarted            = false
+        isPreparing               = false
+        prepareTimer?.cancel()
+        prepareTimer              = nil
         pendingMirrorConfirmation = false
         orphanedFiles             = []
         progress                  = 0
@@ -177,7 +182,16 @@ final class FileSyncViewModel: ObservableObject {
         isComplete     = false
         isDryRun       = dryRun
         syncHasStarted = false
+        isPreparing    = false
         progress       = 0
+
+        prepareTimer?.cancel()
+        prepareTimer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self, !Task.isCancelled,
+                  self.isRunning, !self.syncHasStarted else { return }
+            self.isPreparing = true
+        }
         statusMessage = dryRun ? "Previewing…" : "Starting…"
         copiedCount   = 0
         skippedCount  = 0
@@ -197,6 +211,8 @@ final class FileSyncViewModel: ObservableObject {
                 Task { @MainActor [weak self] in
                     guard let self, self.syncGeneration == generation else { return }
                     self.syncHasStarted = true
+                    self.isPreparing    = false
+                    self.prepareTimer?.cancel()
                     self.progress       = syncProgress.fraction
                     let verb = dryRun ? "Previewing" : "Processing"
                     self.statusMessage = syncProgress.currentFile.isEmpty

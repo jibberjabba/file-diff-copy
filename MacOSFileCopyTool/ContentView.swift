@@ -92,9 +92,18 @@ struct ContentView: View {
 
             // ── Action buttons ────────────────────────────────────────────
             HStack {
-                Button(vm.isScanning ? "Scanning…"
-                       : vm.comparisonMode == .mirror ? "Start Mirror" : "Start Copy") {
+                Button {
                     vm.startSync()
+                } label: {
+                    if vm.isPreparing {
+                        HStack(spacing: 6) {
+                            ProgressView().scaleEffect(0.7)
+                            Text("Preparing…")
+                        }
+                    } else {
+                        Text(vm.isScanning ? "Scanning…"
+                             : vm.comparisonMode == .mirror ? "Start Mirror" : "Start Copy")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!vm.canStartSync)
