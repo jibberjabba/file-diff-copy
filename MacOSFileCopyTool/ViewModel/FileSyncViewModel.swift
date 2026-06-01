@@ -11,10 +11,11 @@ final class FileSyncViewModel: ObservableObject {
 
     @Published var comparisonMode: ComparisonMode = .fast
 
-    @Published var isRunning:  Bool   = false
-    @Published var isScanning: Bool   = false
-    @Published var isComplete: Bool   = false
-    @Published var isDryRun:   Bool   = false
+    @Published var isRunning:      Bool = false
+    @Published var isScanning:     Bool = false
+    @Published var isComplete:     Bool = false
+    @Published var isDryRun:       Bool = false
+    @Published var syncHasStarted: Bool = false
     @Published var progress:   Double = 0
     @Published var statusMessage: String = ""
 
@@ -107,6 +108,7 @@ final class FileSyncViewModel: ObservableObject {
         isScanning                = false
         isComplete                = false
         isDryRun                  = false
+        syncHasStarted            = false
         pendingMirrorConfirmation = false
         orphanedFiles             = []
         progress                  = 0
@@ -171,10 +173,11 @@ final class FileSyncViewModel: ObservableObject {
         syncGeneration += 1
         let generation = syncGeneration
 
-        isRunning     = true
-        isComplete    = false
-        isDryRun      = dryRun
-        progress      = 0
+        isRunning      = true
+        isComplete     = false
+        isDryRun       = dryRun
+        syncHasStarted = false
+        progress       = 0
         statusMessage = dryRun ? "Previewing…" : "Starting…"
         copiedCount   = 0
         skippedCount  = 0
@@ -193,7 +196,8 @@ final class FileSyncViewModel: ObservableObject {
             await engine.sync(source: source, destination: destination, mode: mode, dryRun: dryRun) { syncProgress in
                 Task { @MainActor [weak self] in
                     guard let self, self.syncGeneration == generation else { return }
-                    self.progress      = syncProgress.fraction
+                    self.syncHasStarted = true
+                    self.progress       = syncProgress.fraction
                     let verb = dryRun ? "Previewing" : "Processing"
                     self.statusMessage = syncProgress.currentFile.isEmpty
                         ? ""

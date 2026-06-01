@@ -59,7 +59,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func heightForCurrentState() -> CGFloat {
         guard let vm = viewModel else { return Self.compactHeight }
         // Show the expanded height whenever there is progress or log content.
-        let hasContent = vm.isRunning || vm.isComplete || !vm.logEntries.isEmpty
+        let hasContent = vm.syncHasStarted || vm.isComplete || !vm.logEntries.isEmpty
         return hasContent ? Self.expandedHeight : Self.compactHeight
     }
 

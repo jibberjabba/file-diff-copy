@@ -114,7 +114,7 @@ struct ContentView: View {
             }
 
             // ── Progress ──────────────────────────────────────────────────
-            if vm.isRunning || vm.isComplete {
+            if vm.syncHasStarted || vm.isComplete {
                 GroupBox(vm.isDryRun ? "Preview" : "Progress") {
                     ProgressSection(
                         progress:      vm.progress,
@@ -168,8 +168,8 @@ struct ContentView: View {
                 setWindowHeight(compactHeight, animated: false)
             }
         }
-        .onChange(of: vm.isRunning, perform: { isRunning in
-            if isRunning {
+        .onChange(of: vm.syncHasStarted, perform: { hasStarted in
+            if hasStarted {
                 if let window = NSApp.keyWindow ?? NSApp.windows.first,
                    !window.styleMask.contains(.fullScreen),
                    !window.isZoomed {
