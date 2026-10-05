@@ -29,6 +29,8 @@ Created at `~/Desktop/FileCopyTest/` (2026-05-28). Reset script: `TestFixtures/r
 | `destination/orphan_subdir/` | Directory only in destination — deleted by Mirror |
 | `source/subdir/nested_new.txt` | New nested file in subdirectory |
 | `source/subdir/nested_uptodate.txt` | Nested file already in sync |
+| `source/dest_edited.txt` | Destination newer **and** different size → `[NEWER DST]` in every mode, never overwritten (H1, added 2026-10-05) |
+| `source/collision` | Source file vs destination folder `collision/` → `[ERROR]`, folder kept (H2, added 2026-10-05) |
 
 **Fixture fix (2026-05-28):** `dest_newer.txt` previously had different content sizes (23 vs 48 bytes), causing Fast mode to copy it as "size changed" before reaching anomaly detection. Fixed to use identical 33-byte content in both copies so the size check passes through to date comparison.
 

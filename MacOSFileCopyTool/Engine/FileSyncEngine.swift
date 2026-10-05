@@ -138,6 +138,18 @@ struct ScanResult {
     var failures: [(path: String, message: String)] = []
 }
 
+/// Per-file errors the engine raises itself (reported in the log like I/O errors).
+enum SyncFileError: LocalizedError, Equatable {
+    case destinationIsFolder
+
+    var errorDescription: String? {
+        switch self {
+        case .destinationIsFolder:
+            return "a folder with this name exists at the destination — not replaced"
+        }
+    }
+}
+
 /// Reasons the Mirror deletion pass refuses to run. Each one means "absent from
 /// the source" can't be trusted, so deleting would risk wiping good files.
 enum MirrorSafetyError: LocalizedError, Equatable {
@@ -455,9 +467,18 @@ final class FileSyncEngine {
 
     /// Returns why `source` should be copied, or `nil` if the destination is already in sync.
     private func copyReason(source: URL, destination: URL, mode: ComparisonMode) throws -> CopyReason? {
-        guard FileManager.default.fileExists(atPath: destination.path) else {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: destination.path, isDirectory: &isDirectory) else {
             return .newFile
         }
+
+        // Replacing would recursively delete the folder and everything in it.
+        if isDirectory.boolValue { throw SyncFileError.destinationIsFolder }
+
+        // A destination edited more recently than the source is never overwritten,
+        // in any mode — not even when its size or content differs. It is skipped
+        // here and reported as [NEWER DST] by detectAnomaly.
+        if try destinationIsNewer(source: source, destination: destination) { return nil }
 
         switch mode {
 
@@ -500,28 +521,30 @@ final class FileSyncEngine {
         switch mode {
 
         case .fast, .mirror, .thorough:
-            let keys: Set<URLResourceKey> = [.contentModificationDateKey]
-            let srcValues = try source.resourceValues(forKeys: keys)
-            let dstValues = try destination.resourceValues(forKeys: keys)
-            guard let srcDate = srcValues.contentModificationDate,
-                  let dstDate = dstValues.contentModificationDate else { return nil }
-            let srcSec = srcDate.timeIntervalSinceReferenceDate.rounded(.down)
-            let dstSec = dstDate.timeIntervalSinceReferenceDate.rounded(.down)
-            return dstSec > srcSec ? .newerDestination : nil
+            return try destinationIsNewer(source: source, destination: destination) ? .newerDestination : nil
 
         case .archive:
+            if try destinationIsNewer(source: source, destination: destination) { return .newerDestination }
             let keys: Set<URLResourceKey> = [.contentModificationDateKey, .fileSizeKey]
             let srcValues = try source.resourceValues(forKeys: keys)
             let dstValues = try destination.resourceValues(forKeys: keys)
-            guard let srcDate = srcValues.contentModificationDate,
-                  let dstDate = dstValues.contentModificationDate else { return nil }
-            let srcSec = srcDate.timeIntervalSinceReferenceDate.rounded(.down)
-            let dstSec = dstDate.timeIntervalSinceReferenceDate.rounded(.down)
-            if dstSec > srcSec { return .newerDestination }
+            guard srcValues.contentModificationDate != nil,
+                  dstValues.contentModificationDate != nil else { return nil }
             if let srcSize = srcValues.fileSize, let dstSize = dstValues.fileSize,
                srcSize != dstSize { return .sizeMismatch }
             return nil
         }
+    }
+
+    /// True when the destination's mod-date is strictly later, compared at
+    /// 1-second granularity (see the 1-second note in CLAUDE.md).
+    private func destinationIsNewer(source: URL, destination: URL) throws -> Bool {
+        let keys: Set<URLResourceKey> = [.contentModificationDateKey]
+        guard let srcDate = try source.resourceValues(forKeys: keys).contentModificationDate,
+              let dstDate = try destination.resourceValues(forKeys: keys).contentModificationDate
+        else { return false }
+        return dstDate.timeIntervalSinceReferenceDate.rounded(.down)
+             > srcDate.timeIntervalSinceReferenceDate.rounded(.down)
     }
 
     private func sha256(of url: URL) throws -> SHA256Digest {

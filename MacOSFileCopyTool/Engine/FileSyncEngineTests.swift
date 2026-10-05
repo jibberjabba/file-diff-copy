@@ -312,6 +312,92 @@ final class FileSyncEngineTests: XCTestCase {
         XCTAssertEqual(try read(destFile), "theirs")
     }
 
+    // MARK: - H1: a newer destination is never overwritten
+
+    private let older = Date(timeIntervalSinceReferenceDate: 800_000_000)
+    private var newer: Date { older.addingTimeInterval(3600) }
+
+    /// Destination was edited after the source, so its size or content differs.
+    private func makeEditedDestination(sameSize: Bool = false) throws -> URL {
+        try write(sameSize ? "AAAA" : "original", to: source.appendingPathComponent("notes.txt"), date: older)
+        return try write(sameSize ? "BBBB" : "original + edits made at the destination",
+                         to: destination.appendingPathComponent("notes.txt"), date: newer)
+    }
+
+    private func assertKeptAsNewerDestination(_ result: SyncProgress, _ destFile: URL,
+                                              file: StaticString = #filePath, line: UInt = #line) throws {
+        XCTAssertEqual(result.copiedCount, 0, file: file, line: line)
+        XCTAssertEqual(result.warningCount, 1, file: file, line: line)
+        XCTAssertTrue(result.logEntries.contains {
+            if case .newerDestination = $0.action { return $0.relativePath == "notes.txt" } else { return false }
+        }, "Expected a [NEWER DST] entry", file: file, line: line)
+        XCTAssertNotEqual(try read(destFile), try read(source.appendingPathComponent("notes.txt")),
+                          "Destination edits must survive", file: file, line: line)
+    }
+
+    func testFastKeepsNewerDestinationWithDifferentSize() async throws {
+        let destFile = try makeEditedDestination()
+        try assertKeptAsNewerDestination(await run(mode: .fast), destFile)
+    }
+
+    func testMirrorKeepsNewerDestinationWithDifferentSize() async throws {
+        let destFile = try makeEditedDestination()
+        try assertKeptAsNewerDestination(await run(mode: .mirror, confirmedOrphans: []), destFile)
+    }
+
+    func testThoroughKeepsNewerDestinationWithDifferentContent() async throws {
+        let destFile = try makeEditedDestination(sameSize: true)
+        try assertKeptAsNewerDestination(await run(mode: .thorough), destFile)
+    }
+
+    func testPreviewReportsNewerDestinationInsteadOfWouldCopy() async throws {
+        let destFile = try makeEditedDestination()
+        try assertKeptAsNewerDestination(await run(mode: .fast, dryRun: true), destFile)
+    }
+
+    func testFastStillCopiesSizeChangeWhenDatesAreEqual() async throws {
+        try write("short", to: source.appendingPathComponent("notes.txt"), date: older)
+        let destFile = try write("much longer old text", to: destination.appendingPathComponent("notes.txt"),
+                                 date: older)
+
+        let result = await run(mode: .fast)
+
+        XCTAssertEqual(result.copiedCount, 1)
+        XCTAssertEqual(try read(destFile), "short")
+    }
+
+    // MARK: - H2: a source file never replaces a destination folder
+
+    private func makeFolderCollision() throws -> URL {
+        try write("I am a file", to: source.appendingPathComponent("photos"), date: newer)
+        return try write("precious", to: destination.appendingPathComponent("photos/IMG_0001.jpg"), date: older)
+    }
+
+    func testSourceFileDoesNotReplaceDestinationFolder() async throws {
+        for mode in ComparisonMode.allCases {
+            let inner = try makeFolderCollision()
+
+            let result = await run(mode: mode, confirmedOrphans: [])
+
+            XCTAssertEqual(try read(inner), "precious", "\(mode.label): folder contents must survive")
+            XCTAssertEqual(result.copiedCount, 0, mode.label)
+            XCTAssertEqual(result.errorCount, 1, mode.label)
+            XCTAssertTrue(result.logEntries.contains {
+                if case .error = $0.action { return $0.relativePath == "photos" } else { return false }
+            }, "\(mode.label): expected an [ERROR] entry for the collision")
+        }
+    }
+
+    func testFolderCollisionIsReportedInPreview() async throws {
+        let inner = try makeFolderCollision()
+
+        let result = await run(mode: .fast, dryRun: true)
+
+        XCTAssertEqual(result.copiedCount, 0, "Preview must not claim it would replace a folder")
+        XCTAssertEqual(result.errorCount, 1)
+        XCTAssertTrue(exists(inner))
+    }
+
     // MARK: - C5: cancellation is sticky
 
     func testCancelledEngineStaysCancelledWhenSyncIsCalled() async throws {

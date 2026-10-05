@@ -45,6 +45,8 @@ Sync runs as a Swift `async` task so the UI stays responsive. `Task.yield()` is 
 
 ## Comparison logic
 
+**All modes:** a destination file whose modification date is newer than the source's is never overwritten. It's reported as `[NEWER DST]`. A source file never replaces a destination *folder* of the same name; that's reported as an error.
+
 **Fast / Mirror:** size first (fast reject), then modification date rounded to the nearest second.
 
 **Thorough:** size first, then extended attributes (cheap metadata check), then full SHA-256 of file contents. Ignores `com.apple.quarantine` and `com.apple.lastuseddate#PS` xattrs.
