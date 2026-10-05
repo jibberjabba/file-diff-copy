@@ -90,6 +90,13 @@ struct ContentView: View {
                 }
             }
 
+            // Mirror pre-scan refused to offer deletions (source unreadable/empty).
+            if let message = vm.mirrorScanError {
+                Label(message, systemImage: "exclamationmark.octagon.fill")
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
             // ── Action buttons ────────────────────────────────────────────
             HStack {
                 Button {

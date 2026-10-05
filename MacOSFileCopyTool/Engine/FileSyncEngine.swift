@@ -123,48 +123,82 @@ enum ComparisonMode: CaseIterable, Hashable {
     }
 }
 
+// MARK: - Scanning
+
+/// A regular file found under a scanned root, with its path relative to that root.
+struct ScannedFile {
+    let url: URL
+    let relativePath: String
+}
+
+/// The result of walking one folder tree. `failures` holds every item that could
+/// not be read — a non-empty list means the file list is incomplete.
+struct ScanResult {
+    var files:    [ScannedFile] = []
+    var failures: [(path: String, message: String)] = []
+}
+
+/// Reasons the Mirror deletion pass refuses to run. Each one means "absent from
+/// the source" can't be trusted, so deleting would risk wiping good files.
+enum MirrorSafetyError: LocalizedError, Equatable {
+    case sourceUnavailable
+    case sourceEmpty
+    case scanIncomplete(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .sourceUnavailable:     return "the source folder is unavailable"
+        case .sourceEmpty:           return "the source folder contains no files"
+        case .scanIncomplete(let n): return "\(n) item(s) could not be read while scanning"
+        }
+    }
+}
+
 // MARK: - Engine
 
 /// Pure Swift sync engine — no SwiftUI dependency, fully testable in isolation.
 ///
+/// Create a new engine for every run: cancellation is sticky, so a cancelled
+/// engine can never be revived by a later `sync()` call.
+///
 /// Pass `dryRun: true` to preview what would happen without modifying any files.
 /// Log entries use `.wouldCopy` / `.wouldDelete` in dry-run mode.
-/// Call `cancel()` at any time to request a graceful stop.
 final class FileSyncEngine {
 
     private let logger = Logger(subsystem: "com.macos.filecopytool", category: "FileSyncEngine")
 
-    private(set) var isCancelled = false
+    private let cancelFlag = OSAllocatedUnfairLock(initialState: false)
+
+    /// Read from the engine's thread, written from the main actor — hence the lock.
+    /// Also honours cancellation of the enclosing Swift `Task`.
+    var isCancelled: Bool {
+        cancelFlag.withLock { $0 } || Task.isCancelled
+    }
 
     func cancel() {
-        isCancelled = true
+        cancelFlag.withLock { $0 = true }
+    }
+
+    /// File-copy primitive. Tests replace it to simulate a copy failing part-way.
+    var copyItem: (URL, URL) throws -> Void = { source, destination in
+        try FileManager.default.copyItem(at: source, to: destination)
     }
 
     // MARK: - Public API
 
+    /// - Parameter confirmedOrphans: relative paths the user approved for deletion
+    ///   in the Mirror confirmation sheet. A real (non-dry-run) Mirror deletes only
+    ///   files that are in this set *and* still orphaned now; `nil` deletes nothing.
     func sync(
         source: URL,
         destination: URL,
         mode: ComparisonMode,
         dryRun: Bool = false,
+        confirmedOrphans: Set<String>? = nil,
         onProgress: @escaping (SyncProgress) -> Void
     ) async {
-        isCancelled = false
-
-        let allFiles = enumerateFiles(in: source)
-
-        // Pre-scan orphans for Mirror so their count is in the progress denominator.
-        let preScannedOrphans: [URL]
-        if mode == .mirror {
-            preScannedOrphans = await findOrphans(source: source, destination: destination)
-        } else {
-            preScannedOrphans = []
-        }
-
-        logger.debug("Sync started. \(allFiles.count) source files\(dryRun ? " (dry run)" : "").")
-
         var progress = SyncProgress(
-            totalFiles:     allFiles.count + preScannedOrphans.count,
+            totalFiles:     0,
             processedFiles: 0,
             copiedCount:    0,
             skippedCount:   0,
@@ -176,26 +210,64 @@ final class FileSyncEngine {
         )
         progress.isDryRun = dryRun
 
-        for fileURL in allFiles {
+        // An unmounted volume must stop the run outright — never copy into, or
+        // judge orphans against, a folder that isn't there.
+        for (label, root) in [("Source", source), ("Destination", destination)]
+        where !isReachableDirectory(root) {
+            progress.errorCount += 1
+            appendLog(LogEntry(action: .error("\(label) folder is unavailable"), relativePath: root.path),
+                      to: &progress)
+            progress.currentFile = "\(label) folder is unavailable."
+            onProgress(progress)
+            logger.error("\(label) folder unavailable: \(root.path)")
+            return
+        }
+
+        let sourceScan = scan(source)
+        for failure in sourceScan.failures {
+            progress.errorCount += 1
+            appendLog(LogEntry(action: .error(failure.message), relativePath: failure.path), to: &progress)
+            logger.error("Could not read \(failure.path): \(failure.message)")
+        }
+
+        // Pre-scan orphans for Mirror so their count is in the progress denominator.
+        var orphans: [ScannedFile] = []
+        if mode == .mirror {
+            do {
+                orphans = try mirrorOrphans(source: source, destination: destination, sourceScan: sourceScan)
+                if !dryRun {
+                    let confirmed = confirmedOrphans ?? []
+                    orphans = orphans.filter { confirmed.contains($0.relativePath) }
+                }
+            } catch {
+                progress.errorCount += 1
+                appendLog(LogEntry(action: .error("Mirror deletions skipped — \(error.localizedDescription)"),
+                                   relativePath: "(mirror)"),
+                          to: &progress)
+                logger.error("Mirror deletions skipped: \(error.localizedDescription)")
+            }
+        }
+
+        progress.totalFiles = sourceScan.files.count + orphans.count
+        logger.debug("Sync started. \(sourceScan.files.count) source files\(dryRun ? " (dry run)" : "").")
+
+        for file in sourceScan.files {
             if isCancelled { break }
 
-            let relativePath = String(
-                fileURL.path.dropFirst(source.path.count)
-            ).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-
+            let relativePath = file.relativePath
             let destURL = destination.appendingPathComponent(relativePath)
             progress.currentFile = relativePath
 
             do {
-                if let reason = try copyReason(source: fileURL, destination: destURL, mode: mode) {
+                if let reason = try copyReason(source: file.url, destination: destURL, mode: mode) {
                     if !dryRun {
-                        try performCopy(source: fileURL, destination: destURL)
+                        try performCopy(source: file.url, destination: destURL)
                     }
                     progress.copiedCount += 1
                     let action: FileSyncAction = dryRun ? .wouldCopy(reason) : .copied(reason)
                     appendLog(LogEntry(action: action, relativePath: relativePath), to: &progress)
                     logger.debug("\(dryRun ? "Would copy" : "Copied"): \(relativePath) (\(reason))")
-                } else if let anomaly = try detectAnomaly(source: fileURL,
+                } else if let anomaly = try detectAnomaly(source: file.url,
                                                            destination: destURL,
                                                            mode: mode) {
                     progress.warningCount += 1
@@ -219,33 +291,45 @@ final class FileSyncEngine {
             await Task.yield()
         }
 
-        // Mirror deletion pass — uses pre-scanned list; skips all I/O in dry-run.
-        if mode == .mirror && !isCancelled {
-            for orphanURL in preScannedOrphans {
-                if isCancelled { break }
-                let relativePath = String(
-                    orphanURL.path.dropFirst(destination.path.count)
-                ).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                progress.currentFile = relativePath
-                do {
-                    if !dryRun {
-                        try FileManager.default.removeItem(at: orphanURL)
+        // Mirror deletion pass — skips all I/O in dry-run.
+        if !orphans.isEmpty && !isCancelled {
+            if !isReachableDirectory(source) {
+                progress.errorCount += 1
+                appendLog(LogEntry(action: .error("Mirror deletions skipped — the source folder became unavailable"),
+                                   relativePath: "(mirror)"),
+                          to: &progress)
+            } else {
+                for orphan in orphans {
+                    if isCancelled { break }
+                    let relativePath = orphan.relativePath
+                    progress.currentFile = relativePath
+
+                    // The file may have appeared in the source since the scan.
+                    if FileManager.default.fileExists(atPath: source.appendingPathComponent(relativePath).path) {
+                        progress.skippedCount += 1
+                        appendLog(LogEntry(action: .skipped, relativePath: relativePath), to: &progress)
+                    } else {
+                        do {
+                            if !dryRun {
+                                try FileManager.default.removeItem(at: orphan.url)
+                            }
+                            progress.deletedCount += 1
+                            let action: FileSyncAction = dryRun ? .wouldDelete : .deleted
+                            appendLog(LogEntry(action: action, relativePath: relativePath), to: &progress)
+                            logger.debug("\(dryRun ? "Would delete" : "Deleted"): \(relativePath)")
+                        } catch {
+                            progress.errorCount += 1
+                            appendLog(
+                                LogEntry(action: .error(error.localizedDescription), relativePath: relativePath),
+                                to: &progress
+                            )
+                            logger.error("Delete failed for \(relativePath): \(error.localizedDescription)")
+                        }
                     }
-                    progress.deletedCount += 1
-                    let action: FileSyncAction = dryRun ? .wouldDelete : .deleted
-                    appendLog(LogEntry(action: action, relativePath: relativePath), to: &progress)
-                    logger.debug("\(dryRun ? "Would delete" : "Deleted"): \(relativePath)")
-                } catch {
-                    progress.errorCount += 1
-                    appendLog(
-                        LogEntry(action: .error(error.localizedDescription), relativePath: relativePath),
-                        to: &progress
-                    )
-                    logger.error("Delete failed for \(relativePath): \(error.localizedDescription)")
+                    progress.processedFiles += 1
+                    onProgress(progress)
+                    await Task.yield()
                 }
-                progress.processedFiles += 1
-                onProgress(progress)
-                await Task.yield()
             }
         }
 
@@ -258,18 +342,56 @@ final class FileSyncEngine {
 
     // MARK: - Public helpers
 
-    func findOrphans(source: URL, destination: URL) async -> [URL] {
-        enumerateFiles(in: destination).filter { destURL in
-            let relativePath = String(
-                destURL.path.dropFirst(destination.path.count)
-            ).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            return !FileManager.default.fileExists(
-                atPath: source.appendingPathComponent(relativePath).path
-            )
+    /// Relative paths of destination files with no counterpart in the source.
+    /// Throws instead of guessing whenever the source can't be fully read.
+    func findOrphans(source: URL, destination: URL) async throws -> [String] {
+        try mirrorOrphans(source: source, destination: destination, sourceScan: scan(source))
+            .map(\.relativePath)
+    }
+
+    /// Walks `root` and returns every regular file in it.
+    func scan(_ root: URL) -> ScanResult {
+        var result = ScanResult()
+
+        // Enumerating a symlink yields nothing, so resolve the root first.
+        let resolvedRoot = root.resolvingSymlinksInPath()
+        let enumerationFailures = FailureList()
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: resolvedRoot,
+            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
+            options: [.skipsHiddenFiles],
+            errorHandler: { url, error in
+                enumerationFailures.items.append((url.path, error.localizedDescription))
+                return true   // keep going; the failure is reported, not ignored
+            }
+        ) else {
+            result.failures.append((root.path, "Could not open folder"))
+            return result
         }
+
+        let prefixes = Self.rootPrefixes(for: resolvedRoot)
+        for case let url as URL in enumerator {
+            do {
+                guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
+                guard let relativePath = Self.relativePath(of: url, prefixes: prefixes) else {
+                    result.failures.append((url.path, "Path is outside the scanned folder"))
+                    continue
+                }
+                result.files.append(ScannedFile(url: url, relativePath: relativePath))
+            } catch {
+                result.failures.append((url.path, error.localizedDescription))
+            }
+        }
+        result.failures += enumerationFailures.items
+        return result
     }
 
     // MARK: - Private helpers
+
+    private final class FailureList {
+        var items: [(path: String, message: String)] = []
+    }
 
     private static let maxLogEntries = 20_000
 
@@ -284,28 +406,51 @@ final class FileSyncEngine {
         }
     }
 
-    private func enumerateFiles(in directory: URL) -> [URL] {
-        let fm = FileManager.default
-        guard let enumerator = fm.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return []
+    private func isReachableDirectory(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
+    private func mirrorOrphans(source: URL, destination: URL, sourceScan: ScanResult) throws -> [ScannedFile] {
+        guard isReachableDirectory(source) else { throw MirrorSafetyError.sourceUnavailable }
+        guard sourceScan.failures.isEmpty else {
+            throw MirrorSafetyError.scanIncomplete(sourceScan.failures.count)
+        }
+        guard !sourceScan.files.isEmpty else { throw MirrorSafetyError.sourceEmpty }
+
+        let destinationScan = scan(destination)
+        guard destinationScan.failures.isEmpty else {
+            throw MirrorSafetyError.scanIncomplete(destinationScan.failures.count)
         }
 
-        var files: [URL] = []
-        for case let url as URL in enumerator {
-            do {
-                let values = try url.resourceValues(forKeys: [.isRegularFileKey])
-                if values.isRegularFile == true {
-                    files.append(url)
-                }
-            } catch {
-                logger.error("Could not read resource values for \(url.path): \(error.localizedDescription)")
-            }
+        // A file is an orphan only if the scan didn't see it AND it isn't on disk
+        // (covers case-insensitive name matches and hidden/symlinked source entries).
+        let sourcePaths = Set(sourceScan.files.map(\.relativePath))
+        return destinationScan.files.filter { file in
+            !sourcePaths.contains(file.relativePath)
+                && !FileManager.default.fileExists(atPath: source.appendingPathComponent(file.relativePath).path)
         }
-        return files
+    }
+
+    /// The enumerator may report children under a different spelling of the root
+    /// (`/tmp/x` → `/private/tmp/x`), so accept both forms of the prefix.
+    static func rootPrefixes(for root: URL) -> [String] {
+        let base = root.standardizedFileURL.path
+        let alternate = base.hasPrefix("/private/") ? String(base.dropFirst("/private".count))
+                                                    : "/private" + base
+        return [base, alternate].map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+    }
+
+    /// `nil` when `url` isn't under any of `prefixes` — callers must treat that as
+    /// an error rather than guess at a relative path.
+    static func relativePath(of url: URL, prefixes: [String]) -> String? {
+        let path = url.standardizedFileURL.path
+        for prefix in prefixes where path.hasPrefix(prefix) {
+            let relativePath = String(path.dropFirst(prefix.count))
+            return relativePath.isEmpty ? nil : relativePath
+        }
+        return nil
     }
 
     /// Returns why `source` should be copied, or `nil` if the destination is already in sync.
@@ -428,6 +573,7 @@ final class FileSyncEngine {
         "com.apple.lastuseddate#PS",
     ]
 
+
     private func performCopy(source: URL, destination: URL) throws {
         let fm = FileManager.default
 
@@ -439,13 +585,24 @@ final class FileSyncEngine {
             try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
         }
 
-        if fm.fileExists(atPath: destination.path) {
-            try fm.removeItem(at: destination)
-        }
-        try fm.copyItem(at: source, to: destination)
-
-        if let date = srcDate {
-            try fm.setAttributes([.modificationDate: date], ofItemAtPath: destination.path)
+        // Copy to a temp file beside the destination, then swap it into place, so
+        // a failed copy never destroys the existing destination file. The leading
+        // dot keeps a leftover temp file (e.g. after a crash) out of later scans.
+        let tempURL = destDir.appendingPathComponent(".fdc-\(UUID().uuidString).tmp")
+        do {
+            try copyItem(source, tempURL)
+            if let date = srcDate {
+                try fm.setAttributes([.modificationDate: date], ofItemAtPath: tempURL.path)
+            }
+            if fm.fileExists(atPath: destination.path) {
+                _ = try fm.replaceItemAt(destination, withItemAt: tempURL,
+                                         backupItemName: nil, options: .usingNewMetadataOnly)
+            } else {
+                try fm.moveItem(at: tempURL, to: destination)
+            }
+        } catch {
+            try? fm.removeItem(at: tempURL)
+            throw error
         }
     }
 }
