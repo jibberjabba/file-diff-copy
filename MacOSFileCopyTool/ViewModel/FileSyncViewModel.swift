@@ -32,13 +32,18 @@ final class FileSyncViewModel: ObservableObject {
 
     @Published var pendingMirrorConfirmation = false
     @Published var orphanedFiles: [String] = []
+    /// Why the Mirror pre-scan refused to offer any deletions, if it did.
+    @Published var mirrorScanError: String?
 
     var isMirrorEnabled: Bool { comparisonMode == .mirror }
 
     // MARK: - Private
 
-    private let engine        = FileSyncEngine()
-    private var activeTask:   Task<Void, Never>?
+    /// A fresh engine per run, so cancelling one run can never affect another.
+    private var activeEngine: FileSyncEngine?
+    /// The most recent run or scan. After `resetForNextSession()` it may still be
+    /// winding down; the next run awaits it so two runs never overlap.
+    private(set) var activeTask: Task<Void, Never>?
     private var prepareTimer: Task<Void, Never>?
     private var syncGeneration = 0
 
@@ -73,6 +78,7 @@ final class FileSyncViewModel: ObservableObject {
     // MARK: - Sync control
 
     func startSync() {
+        mirrorScanError = nil
         if comparisonMode == .mirror {
             beginMirrorScan()
         } else {
@@ -83,13 +89,16 @@ final class FileSyncViewModel: ObservableObject {
     /// Runs the comparison without modifying any files.
     /// Mirror mode bypasses the confirmation sheet since nothing will be deleted.
     func startPreview() {
+        mirrorScanError = nil
         beginCopy(dryRun: true)
     }
 
     func confirmMirror() {
         pendingMirrorConfirmation = false
+        // Only the files the user just reviewed may be deleted.
+        let confirmed = Set(orphanedFiles)
         orphanedFiles = []
-        beginCopy()
+        beginCopy(confirmedOrphans: confirmed)
     }
 
     func cancelMirror() {
@@ -98,14 +107,17 @@ final class FileSyncViewModel: ObservableObject {
     }
 
     func cancelSync() {
-        engine.cancel()
+        activeEngine?.cancel()
         statusMessage = "Cancelling…"
     }
 
     func resetForNextSession() {
-        if isRunning { engine.cancel() }
+        // Bumping the generation discards every queued progress update and the
+        // completion handler of the run being abandoned.
+        syncGeneration += 1
+        activeEngine?.cancel()
         activeTask?.cancel()
-        activeTask                = nil
+        activeEngine              = nil
         isRunning                 = false
         isScanning                = false
         isComplete                = false
@@ -116,6 +128,7 @@ final class FileSyncViewModel: ObservableObject {
         prepareTimer              = nil
         pendingMirrorConfirmation = false
         orphanedFiles             = []
+        mirrorScanError           = nil
         progress                  = 0
         statusMessage             = ""
         copiedCount               = 0
@@ -149,30 +162,44 @@ final class FileSyncViewModel: ObservableObject {
     private func beginMirrorScan() {
         guard let source = sourceURL, let destination = destinationURL else { return }
 
+        syncGeneration += 1
+        let generation = syncGeneration
+
         isScanning    = true
         statusMessage = "Scanning destination for orphaned files…"
 
-        let engine = self.engine
-        _ = source.startAccessingSecurityScopedResource()
-        _ = destination.startAccessingSecurityScopedResource()
+        let engine   = FileSyncEngine()
+        activeEngine = engine
+        let previous = activeTask
+        let sourceAccess      = source.startAccessingSecurityScopedResource()
+        let destinationAccess = destination.startAccessingSecurityScopedResource()
 
         activeTask = Task {
-            let orphans = await engine.findOrphans(source: source, destination: destination)
+            await previous?.value
+            let result: Result<[String], Error>
+            do {
+                result = .success(try await engine.findOrphans(source: source, destination: destination))
+            } catch {
+                result = .failure(error)
+            }
 
-            source.stopAccessingSecurityScopedResource()
-            destination.stopAccessingSecurityScopedResource()
+            if sourceAccess      { source.stopAccessingSecurityScopedResource() }
+            if destinationAccess { destination.stopAccessingSecurityScopedResource() }
 
+            guard self.syncGeneration == generation else { return }
             self.isScanning    = false
             self.statusMessage = ""
-            self.orphanedFiles = orphans.map { url in
-                String(url.path.dropFirst(destination.path.count))
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            switch result {
+            case .success(let orphans):
+                self.orphanedFiles = orphans
+                self.pendingMirrorConfirmation = true
+            case .failure(let error):
+                self.mirrorScanError = "Mirror stopped — \(error.localizedDescription). Nothing was deleted."
             }
-            self.pendingMirrorConfirmation = true
         }
     }
 
-    private func beginCopy(dryRun: Bool = false) {
+    private func beginCopy(dryRun: Bool = false, confirmedOrphans: Set<String>? = nil) {
         guard let source = sourceURL, let destination = destinationURL else { return }
 
         syncGeneration += 1
@@ -200,14 +227,20 @@ final class FileSyncViewModel: ObservableObject {
         errorCount    = 0
         logEntries    = []
 
-        _ = source.startAccessingSecurityScopedResource()
-        _ = destination.startAccessingSecurityScopedResource()
+        let sourceAccess      = source.startAccessingSecurityScopedResource()
+        let destinationAccess = destination.startAccessingSecurityScopedResource()
 
-        let engine = self.engine
-        let mode   = comparisonMode
+        let engine   = FileSyncEngine()
+        activeEngine = engine
+        let previous = activeTask
+        let mode     = comparisonMode
 
         activeTask = Task {
-            await engine.sync(source: source, destination: destination, mode: mode, dryRun: dryRun) { syncProgress in
+            // A run abandoned by resetForNextSession() may still be finishing its
+            // current file — never let two runs touch the destination at once.
+            await previous?.value
+            await engine.sync(source: source, destination: destination, mode: mode,
+                              dryRun: dryRun, confirmedOrphans: confirmedOrphans) { syncProgress in
                 Task { @MainActor [weak self] in
                     guard let self, self.syncGeneration == generation else { return }
                     self.syncHasStarted = true
@@ -227,9 +260,10 @@ final class FileSyncViewModel: ObservableObject {
                 }
             }
 
-            source.stopAccessingSecurityScopedResource()
-            destination.stopAccessingSecurityScopedResource()
+            if sourceAccess      { source.stopAccessingSecurityScopedResource() }
+            if destinationAccess { destination.stopAccessingSecurityScopedResource() }
 
+            guard self.syncGeneration == generation else { return }
             self.isRunning    = false
             self.isComplete   = true
             self.progress     = 1.0

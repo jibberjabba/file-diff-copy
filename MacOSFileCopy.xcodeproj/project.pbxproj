@@ -17,6 +17,11 @@
 		AA200008000000000000001A /* BookmarkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008000000000000001A /* BookmarkManager.swift */; };
 		AA20000A000000000000001A /* MirrorConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA10000A000000000000001A /* MirrorConfirmationView.swift */; };
 		AA200011000000000000001A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA100011000000000000001A /* Assets.xcassets */; };
+		AA800001000000000000001A /* FileSyncEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA810001000000000000001A /* FileSyncEngineTests.swift */; };
+		AA800002000000000000001A /* FileSyncViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA810002000000000000001A /* FileSyncViewModelTests.swift */; };
+		AA800003000000000000001A /* FileSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100007000000000000001A /* FileSyncEngine.swift */; };
+		AA800004000000000000001A /* FileSyncViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100006000000000000001A /* FileSyncViewModel.swift */; };
+		AA800005000000000000001A /* BookmarkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008000000000000001A /* BookmarkManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,10 +37,20 @@
 		AA10000A000000000000001A /* MirrorConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorConfirmationView.swift; sourceTree = "<group>"; };
 		AA100010000000000000001A /* File Diff Copy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "File Diff Copy.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA100011000000000000001A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AA810001000000000000001A /* FileSyncEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSyncEngineTests.swift; sourceTree = "<group>"; };
+		AA810002000000000000001A /* FileSyncViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSyncViewModelTests.swift; sourceTree = "<group>"; };
+		AA810003000000000000001A /* MacOSFileCopyToolTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MacOSFileCopyToolTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AA300002000000000000001A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA820002000000000000001A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -83,6 +98,7 @@
 			isa = PBXGroup;
 			children = (
 				AA100006000000000000001A /* FileSyncViewModel.swift */,
+				AA810002000000000000001A /* FileSyncViewModelTests.swift */,
 			);
 			path = ViewModel;
 			sourceTree = "<group>";
@@ -91,6 +107,7 @@
 			isa = PBXGroup;
 			children = (
 				AA100007000000000000001A /* FileSyncEngine.swift */,
+				AA810001000000000000001A /* FileSyncEngineTests.swift */,
 			);
 			path = Engine;
 			sourceTree = "<group>";
@@ -107,6 +124,7 @@
 			isa = PBXGroup;
 			children = (
 				AA100010000000000000001A /* File Diff Copy.app */,
+				AA810003000000000000001A /* MacOSFileCopyToolTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -131,6 +149,22 @@
 			productReference = AA100010000000000000001A /* File Diff Copy.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA830001000000000000001A /* MacOSFileCopyToolTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA860001000000000000001A /* Build configuration list for PBXNativeTarget "MacOSFileCopyToolTests" */;
+			buildPhases = (
+				AA820001000000000000001A /* Sources */,
+				AA820002000000000000001A /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MacOSFileCopyToolTests;
+			productName = MacOSFileCopyToolTests;
+			productReference = AA810003000000000000001A /* MacOSFileCopyToolTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -143,6 +177,9 @@
 				TargetAttributes = {
 					AA400001000000000000001A = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					AA830001000000000000001A = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -160,6 +197,7 @@
 			projectRoot = "";
 			targets = (
 				AA400001000000000000001A /* MacOSFileCopy */,
+				AA830001000000000000001A /* MacOSFileCopyToolTests */,
 			);
 		};
 /* End PBXProject section */
@@ -189,6 +227,18 @@
 				AA200007000000000000001A /* FileSyncEngine.swift in Sources */,
 				AA200008000000000000001A /* BookmarkManager.swift in Sources */,
 				AA20000A000000000000001A /* MirrorConfirmationView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA820001000000000000001A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA800001000000000000001A /* FileSyncEngineTests.swift in Sources */,
+				AA800002000000000000001A /* FileSyncViewModelTests.swift in Sources */,
+				AA800003000000000000001A /* FileSyncEngine.swift in Sources */,
+				AA800004000000000000001A /* FileSyncViewModel.swift in Sources */,
+				AA800005000000000000001A /* BookmarkManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -378,6 +428,36 @@
 			};
 			name = Release;
 		};
+		AA850001000000000000001A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.filecopy.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA850002000000000000001A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jeff.filecopy.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -395,6 +475,15 @@
 			buildConfigurations = (
 				AA500003000000000000001A /* Debug */,
 				AA500004000000000000001A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA860001000000000000001A /* Build configuration list for PBXNativeTarget "MacOSFileCopyToolTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA850001000000000000001A /* Debug */,
+				AA850002000000000000001A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
