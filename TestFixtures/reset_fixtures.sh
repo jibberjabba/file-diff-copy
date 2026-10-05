@@ -66,6 +66,23 @@ mkdir -p "$BASE/destination/orphan_subdir"
 echo "I am in an orphan directory." > "$BASE/destination/orphan_subdir/orphan_in_dir.txt"
 touch -t 202605271200 "$BASE/destination/orphan_subdir/orphan_in_dir.txt"
 
+# ── 10. EDITED AT DESTINATION — dest newer AND different size (H1) ───────────
+# Must never be overwritten in any mode: expect [NEWER DST], dest text unchanged.
+printf "Draft v1."                                 > "$BASE/source/dest_edited.txt"
+printf "Draft v1 plus edits made at the destination." > "$BASE/destination/dest_edited.txt"
+touch -t 202605271000 "$BASE/source/dest_edited.txt"
+touch -t 202605281000 "$BASE/destination/dest_edited.txt"
+
+# ── 11. FOLDER COLLISION — source FILE vs destination FOLDER, same name (H2) ──
+# Must never replace the folder: expect [ERROR] collision, folder contents kept.
+# (Mirror lists collision/keep_me.txt as an orphan — it is only deleted if the
+# user confirms it in the sheet.)
+echo "I am a file in the source." > "$BASE/source/collision"
+touch -t 202605281200 "$BASE/source/collision"
+mkdir -p "$BASE/destination/collision"
+echo "I live in a destination folder." > "$BASE/destination/collision/keep_me.txt"
+touch -t 202605271200 "$BASE/destination/collision/keep_me.txt"
+
 # ── Verify ────────────────────────────────────────────────────────────────────
 echo ""
 echo "=== SOURCE ==="
