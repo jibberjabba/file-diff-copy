@@ -1,7 +1,8 @@
 import XCTest
 
-/// Regression tests for C5: a run abandoned by `resetForNextSession()` must not
-/// write its state back into the UI or overlap a new run.
+/// Regression tests for C5 (a run abandoned by `resetForNextSession()` must not
+/// write its state back into the UI or overlap a new run) and H3/H4 (log export
+/// and progress delivery).
 @MainActor
 final class FileSyncViewModelTests: XCTestCase {
 
@@ -84,5 +85,36 @@ final class FileSyncViewModelTests: XCTestCase {
         XCTAssertFalse(vm.pendingMirrorConfirmation)
         XCTAssertNotNil(vm.mirrorScanError)
         XCTAssertFalse(vm.isScanning)
+    }
+
+    // MARK: - H3 / H4
+
+    func testSavedLogIncludesEntriesPastTheScreenCap() async throws {
+        let vm = makeViewModel()
+        vm.logDisplayLimit = 10
+        vm.startSync()
+        await vm.activeTask?.value
+
+        XCTAssertEqual(vm.logEntries.count, 11, "10 entries plus the truncation notice")
+
+        let saved = root.appendingPathComponent("saved.txt")
+        try vm.writeLog(to: saved)
+        let lines = try String(contentsOf: saved, encoding: .utf8).split(separator: "\n")
+        XCTAssertEqual(lines.count, fileCount)
+        XCTAssertFalse(lines.contains { $0.hasPrefix("[NOTE]") })
+    }
+
+    /// Contract test for the awaited progress callback. It also passes with the
+    /// old fire-and-forget `Task { @MainActor }` delivery, because main-actor
+    /// tasks happen to run in FIFO order; the await is what makes it guaranteed.
+    func testEveryProgressUpdateIsAppliedBeforeTheRunCompletes() async throws {
+        let vm = makeViewModel()
+        vm.startSync()
+        await vm.activeTask?.value
+        // No drainMainActor(): nothing may still be queued once the run has ended.
+
+        XCTAssertTrue(vm.isComplete)
+        XCTAssertEqual(vm.copiedCount, fileCount)
+        XCTAssertEqual(vm.logEntries.count, fileCount)
     }
 }
