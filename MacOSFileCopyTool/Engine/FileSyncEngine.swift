@@ -573,7 +573,6 @@ final class FileSyncEngine {
         "com.apple.lastuseddate#PS",
     ]
 
-
     private func performCopy(source: URL, destination: URL) throws {
         let fm = FileManager.default
 
@@ -585,9 +584,31 @@ final class FileSyncEngine {
             try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
         }
 
-        // Copy to a temp file beside the destination, then swap it into place, so
-        // a failed copy never destroys the existing destination file. The leading
-        // dot keeps a leftover temp file (e.g. after a crash) out of later scans.
+        // New file: nothing to protect, so copy straight to the final path. The
+        // temp-and-swap below costs an extra round trip per file (~50% slower
+        // over SMB). A partial file from a failed copy is removed, since in
+        // Date Only mode its newer date would otherwise block every later copy.
+        if !fm.fileExists(atPath: destination.path) {
+            do {
+                try copyItem(source, destination)
+                if let date = srcDate {
+                    try fm.setAttributes([.modificationDate: date], ofItemAtPath: destination.path)
+                }
+            } catch {
+                // "File exists" means another writer created it after our check:
+                // it isn't ours, so leave it alone.
+                if (error as? CocoaError)?.code != .fileWriteFileExists {
+                    try? fm.removeItem(at: destination)
+                }
+                throw error
+            }
+            return
+        }
+
+        // Existing file: copy to a temp file beside it, then swap it into place,
+        // so a failed copy never destroys the current destination file. The
+        // leading dot keeps a leftover temp file (e.g. after a crash) out of
+        // later scans.
         let tempURL = destDir.appendingPathComponent(".fdc-\(UUID().uuidString).tmp")
         do {
             try copyItem(source, tempURL)

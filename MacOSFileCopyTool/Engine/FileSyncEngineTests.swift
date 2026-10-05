@@ -231,6 +231,87 @@ final class FileSyncEngineTests: XCTestCase {
         XCTAssertEqual(second.skippedCount, 1)
     }
 
+    // MARK: - New-file fast path (no temp file when there's nothing to protect)
+
+    /// Wraps the real copy and records every path the engine copied to.
+    private func recordingCopy(into targets: @escaping (URL) -> Void) -> (URL, URL) throws -> Void {
+        { source, destination in
+            targets(destination)
+            try FileManager.default.copyItem(at: source, to: destination)
+        }
+    }
+
+    func testNewFileIsCopiedDirectlyWithoutTempFile() async throws {
+        let srcDate = Date(timeIntervalSinceReferenceDate: 800_000_000.25)
+        try write("brand new", to: source.appendingPathComponent("sub/new.txt"), date: srcDate)
+        let destFile = destination.appendingPathComponent("sub/new.txt")
+
+        var targets: [URL] = []
+        let engine = FileSyncEngine()
+        engine.copyItem = recordingCopy { targets.append($0) }
+        let result = await run(engine)
+
+        XCTAssertEqual(result.copiedCount, 1)
+        XCTAssertEqual(targets.map(\.lastPathComponent), ["new.txt"], "New files should skip the temp file")
+        XCTAssertEqual(try read(destFile), "brand new")
+        let destDate = try destFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate!
+        XCTAssertEqual(destDate.timeIntervalSinceReferenceDate.rounded(.down),
+                       srcDate.timeIntervalSinceReferenceDate.rounded(.down))
+    }
+
+    func testOverwriteStillGoesThroughTempFile() async throws {
+        try write("new content", to: source.appendingPathComponent("doc.txt"))
+        try write("old", to: destination.appendingPathComponent("doc.txt"),
+                  date: Date(timeIntervalSinceNow: -3600))
+
+        var targets: [URL] = []
+        let engine = FileSyncEngine()
+        engine.copyItem = recordingCopy { targets.append($0) }
+        let result = await run(engine)
+
+        XCTAssertEqual(result.copiedCount, 1)
+        XCTAssertEqual(targets.count, 1)
+        XCTAssertTrue(targets[0].lastPathComponent.hasPrefix(".fdc-"), "Overwrites must use a temp file")
+        XCTAssertEqual(try read(destination.appendingPathComponent("doc.txt")), "new content")
+    }
+
+    func testFailedNewFileCopyRemovesPartialFile() async throws {
+        try write("brand new", to: source.appendingPathComponent("new.txt"))
+        let destFile = destination.appendingPathComponent("new.txt")
+
+        let engine = FileSyncEngine()
+        engine.copyItem = { _, partial in
+            try "part".write(to: partial, atomically: false, encoding: .utf8)
+            throw CocoaError(.fileWriteOutOfSpace)
+        }
+        let first = await run(engine)
+
+        XCTAssertEqual(first.errorCount, 1)
+        XCTAssertFalse(exists(destFile), "A partial new file must not be left behind")
+
+        // Date Only would never retry a leftover partial (its date is newer), so
+        // the retry succeeding here proves nothing was left in the way.
+        let retry = await run(mode: .archive)
+        XCTAssertEqual(retry.copiedCount, 1)
+        XCTAssertEqual(try read(destFile), "brand new")
+    }
+
+    func testNewFileRaceLeavesOtherWritersFileAlone() async throws {
+        try write("ours", to: source.appendingPathComponent("new.txt"))
+        let destFile = destination.appendingPathComponent("new.txt")
+
+        let engine = FileSyncEngine()
+        engine.copyItem = { _, target in
+            // Another process creates the file between our check and our copy.
+            try "theirs".write(to: target, atomically: false, encoding: .utf8)
+            throw CocoaError(.fileWriteFileExists)
+        }
+        let result = await run(engine)
+
+        XCTAssertEqual(result.errorCount, 1)
+        XCTAssertEqual(try read(destFile), "theirs")
+    }
+
     // MARK: - C5: cancellation is sticky
 
     func testCancelledEngineStaysCancelledWhenSyncIsCalled() async throws {
