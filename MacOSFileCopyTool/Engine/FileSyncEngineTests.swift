@@ -666,6 +666,114 @@ final class FileSyncEngineTests: XCTestCase {
         XCTAssertEqual(result.skippedCount, 1)
     }
 
+    // MARK: - M3: Cancel stops a large copy part-way
+
+    private func writeBig(_ url: URL, megabytes: Int, fill: UInt8 = 0x5A) throws {
+        try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(repeating: fill, count: megabytes << 20).write(to: url)
+    }
+
+    func testCopyFileStopsPartWayWhenCancelled() throws {
+        let src = source.appendingPathComponent("big.bin"), dst = destination.appendingPathComponent("big.bin")
+        try writeBig(src, megabytes: 64)
+        var checks = 0
+
+        XCTAssertThrowsError(try FileSyncEngine.copyFile(from: src, to: dst, clone: false) {
+            checks += 1
+            return checks > 2          // cancel after the copy has started
+        }) { XCTAssertEqual($0 as? SyncFileError, .cancelled) }
+
+        XCTAssertGreaterThan(checks, 2, "copyfile must check for cancellation during the copy")
+        let copied = (try? fm.attributesOfItem(atPath: dst.path)[.size] as? Int) ?? 0
+        XCTAssertLessThan(copied, 64 << 20, "the copy must stop part-way, not run to the end")
+    }
+
+    func testCopyFilePreservesMetadataLikeCopyItem() throws {
+        let src = try write("payload", to: source.appendingPathComponent("meta.txt"))
+        try fm.setAttributes([.posixPermissions: 0o640], ofItemAtPath: src.path)
+        let tag = Array("Red".utf8)
+        XCTAssertEqual(setxattr(src.path, "com.apple.metadata:_kMDItemUserTags", tag, tag.count, 0, 0), 0)
+
+        for clone in [true, false] {
+            let dst = destination.appendingPathComponent("meta-\(clone).txt")
+            try FileSyncEngine.copyFile(from: src, to: dst, clone: clone) { false }
+
+            XCTAssertEqual(try read(dst), "payload")
+            XCTAssertEqual(try fm.attributesOfItem(atPath: dst.path)[.posixPermissions] as? Int, 0o640)
+            var buf = [UInt8](repeating: 0, count: 16)
+            let n = getxattr(dst.path, "com.apple.metadata:_kMDItemUserTags", &buf, buf.count, 0, 0)
+            XCTAssertEqual(Array(buf.prefix(max(n, 0))), tag, "clone: \(clone)")
+        }
+    }
+
+    func testCopyFileFailsWithFileExistsLikeCopyItem() throws {
+        // performCopy relies on this error to leave another writer's file alone.
+        let src = try write("ours", to: source.appendingPathComponent("a.txt"))
+        let dst = try write("theirs", to: destination.appendingPathComponent("a.txt"))
+
+        XCTAssertThrowsError(try FileSyncEngine.copyFile(from: src, to: dst) { false }) {
+            XCTAssertEqual(($0 as? CocoaError)?.code, .fileWriteFileExists)
+        }
+        XCTAssertEqual(try read(dst), "theirs")
+    }
+
+    /// An engine whose copies are chunked (not cloned) and cancel the run as
+    /// soon as they start, like a user pressing Cancel mid-file.
+    private func engineCancellingDuringCopy() -> FileSyncEngine {
+        let engine = FileSyncEngine()
+        engine.copyItem = { [unowned engine] source, destination in
+            var started = false
+            try FileSyncEngine.copyFile(from: source, to: destination, clone: false) {
+                if started { engine.cancel() }
+                started = true
+                return engine.isCancelled
+            }
+        }
+        return engine
+    }
+
+    func testCancelDuringNewFileCopyLeavesNothingBehind() async throws {
+        try writeBig(source.appendingPathComponent("big.bin"), megabytes: 32)
+
+        let result = await run(engineCancellingDuringCopy())
+
+        XCTAssertFalse(exists(destination.appendingPathComponent("big.bin")), "partial file must be removed")
+        XCTAssertEqual(result.copiedCount, 0)
+        XCTAssertEqual(result.errorCount, 0, "cancelling is not an error")
+        XCTAssertEqual(result.currentFile, "Cancelled.")
+        XCTAssertTrue(result.logEntries.contains { $0.displayText.contains("Cancelled during big.bin") })
+    }
+
+    func testCancelDuringOverwriteKeepsOldDestination() async throws {
+        let old = Date(timeIntervalSince1970: 1_600_000_000)
+        try writeBig(source.appendingPathComponent("big.bin"), megabytes: 32)
+        let dst = try write("previous version", to: destination.appendingPathComponent("big.bin"), date: old)
+
+        let result = await run(engineCancellingDuringCopy())
+
+        XCTAssertEqual(try read(dst), "previous version")
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: destination.path), ["big.bin"], "no temp file left")
+        XCTAssertEqual(result.copiedCount, 0)
+        XCTAssertEqual(result.errorCount, 0)
+    }
+
+    func testCancelDuringThoroughCompareStopsReading() async throws {
+        try makeThoroughPair(chunks: 8, differAt: nil)
+        let engine = FileSyncEngine()
+        var bytesRead = 0
+        let read = engine.readChunk
+        engine.readChunk = { [unowned engine] handle, count in
+            engine.cancel()
+            let data = try read(handle, count); bytesRead += data.count; return data
+        }
+
+        let result = await run(engine, mode: .thorough)
+
+        XCTAssertEqual(bytesRead, 2 * chunk, "one chunk of each file, then stop")
+        XCTAssertEqual(result.errorCount, 0)
+        XCTAssertEqual(result.currentFile, "Cancelled.")
+    }
+
     // MARK: - C5: cancellation is sticky
 
     func testCancelledEngineStaysCancelledWhenSyncIsCalled() async throws {
