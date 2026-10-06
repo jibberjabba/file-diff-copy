@@ -544,6 +544,56 @@ final class FileSyncEngineTests: XCTestCase {
         for url in kept { XCTAssertTrue(exists(url), url.lastPathComponent) }
     }
 
+    // MARK: - M1: system-written xattrs never make Thorough re-copy a file
+
+    private func setXattr(_ name: String, _ value: String, on url: URL) throws {
+        let data = Array(value.utf8)
+        XCTAssertEqual(setxattr(url.path, name, data, data.count, 0, XATTR_NOFOLLOW), 0, name)
+    }
+
+    func testIgnoredXattrList() {
+        for name in ["com.apple.quarantine", "com.apple.lastuseddate#PS", "com.apple.macl",
+                     "com.apple.provenance", "com.apple.metadata:kMDLabel_mcgbbolobrq75k5rhupxjretzy"] {
+            XCTAssertTrue(FileSyncEngine.isIgnoredXattr(name), name)
+        }
+        for name in ["com.apple.FinderInfo", "com.apple.ResourceFork", "com.apple.metadata:_kMDItemUserTags",
+                     "com.apple.metadata:kMDItemWhereFroms", "com.apple.TextEncoding", "com.example.custom"] {
+            XCTAssertFalse(FileSyncEngine.isIgnoredXattr(name), name)
+        }
+    }
+
+    func testSystemXattrChangesDoNotTriggerThoroughRecopy() async throws {
+        let systemWritten = [
+            ("source", "com.apple.macl"),          // file opened in a sandboxed app
+            ("source", "com.apple.provenance"),
+            ("source", "com.apple.metadata:kMDLabel_abc123"),
+            ("destination", "com.apple.quarantine"),  // stamped by the sandbox on files the app writes
+        ]
+        for (side, name) in systemWritten {
+            let file = "\(side)-\(name).txt"
+            let src = try write("same content", to: source.appendingPathComponent(file))
+            _ = await run(mode: .thorough)
+            try setXattr(name, "system value", on: side == "source" ? src : destination.appendingPathComponent(file))
+
+            let result = await run(mode: .thorough)
+
+            XCTAssertEqual(result.copiedCount, 0, "\(name) on \(side) must not cause a re-copy")
+            try fm.removeItem(at: src)
+            try fm.removeItem(at: destination.appendingPathComponent(file))
+        }
+    }
+
+    func testUserXattrChangeStillTriggersThoroughRecopy() async throws {
+        let src = try write("same content", to: source.appendingPathComponent("tagged.txt"))
+        _ = await run(mode: .thorough)
+        try setXattr("com.apple.metadata:_kMDItemUserTags", "Red", on: src)
+
+        let result = await run(mode: .thorough)
+
+        XCTAssertEqual(result.copiedCount, 1)
+        XCTAssertTrue(result.logEntries.contains { $0.displayText.contains("(metadata changed)") })
+    }
+
     // MARK: - C5: cancellation is sticky
 
     func testCancelledEngineStaysCancelledWhenSyncIsCalled() async throws {
