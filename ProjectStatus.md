@@ -138,8 +138,7 @@ Every item from the 2026-10-05 full-codebase review is fixed and merged (PRs #1�
 | Mirror folders (M4) | Folders emptied by Mirror's deletions are removed |
 | Bookmarks, logging (M5, M6) | Stale bookmarks refreshed; Console shows paths and errors instead of `<private>` |
 | Low items | Cancelled runs keep partial progress; unreadable xattr lists reported as errors; `.archive` → `.dateOnly` |
-| App Sandbox removed | The sandbox quarantined every copied file (confirmed `0082;…;File Diff Copy;`), so copied apps and scripts tripped Gatekeeper |
+| App Sandbox removed | The sandbox quarantined every copied file (confirmed `0082;…;File Diff Copy;`), so copied apps and scripts tripped Gatekeeper. Verified 2026-10-06: a copy made by the unsandboxed build has no quarantine |
 
 ## Next Steps
 1. In the installed app, pick Source and Destination again. Without the sandbox, the saved folders aren't carried over.
-2. Confirm that copies are no longer quarantined. Delete `~/Desktop/reset_fixtures.sh`, copy `TestFixtures` with the app, then run `xattr -l ~/Desktop/reset_fixtures.sh` in Terminal; it should print nothing.
