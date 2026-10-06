@@ -1,0 +1,30 @@
+name: Tests
+
+# Runs the XCTest suite on a clean checkout of every PR, so a merge is only
+# green if the committed code builds and passes, not just the working tree.
+on:
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same PR cancels the older run; macOS minutes are costly.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # The test bundle is unhosted, so nothing needs a signing identity.
+      - name: Run tests
+        run: |
+          xcodebuild -project MacOSFileCopy.xcodeproj -scheme MacOSFileCopy \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test
