@@ -34,7 +34,7 @@ MacOSFileCopyTool/
 **Tests:** `MacOSFileCopyToolTests` is an unhosted XCTest bundle (`FileSyncEngineTests`, `FileSyncViewModelTests`, `BookmarkManagerTests`, `AppConfigurationTests`). It compiles `FileSyncEngine.swift`, `FileSyncViewModel.swift` and `BookmarkManager.swift` directly (no `@testable import`, no app launch, no sandbox). Test files live beside the file they cover and are members of the test target only. Run them with:
 `xcodebuild -project MacOSFileCopy.xcodeproj -scheme MacOSFileCopy test`
 
-CI (`.github/workflows/tests.yml`) runs the same command on `macos-latest` for every PR, from a clean checkout and with `CODE_SIGNING_ALLOWED=NO` (the bundle is unhosted, so it needs no signing identity). The repo is private, so macOS runner minutes count about 10× against the free allowance; a newer push to the same PR cancels the older run. It can't reach arrakis or test UI, so NAS and window checks stay manual.
+CI (`.github/workflows/tests.yml`) runs the same command on `macos-latest` for every PR, from a clean checkout and with `CODE_SIGNING_ALLOWED=NO` (the bundle is unhosted, so it needs no signing identity). The repo is public, so runner minutes are free, and branch protection on `main` requires the `test` check to pass before a PR can merge (`enforce_admins` is off, so the repo owner can still push to `main` directly or override the check). A newer push to the same PR cancels the older run. It can't reach arrakis or test UI, so NAS and window checks stay manual.
 
 ---
 
