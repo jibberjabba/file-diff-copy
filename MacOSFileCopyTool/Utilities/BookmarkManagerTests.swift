@@ -72,3 +72,43 @@ final class BookmarkManagerTests: XCTestCase {
         XCTAssertFalse(isStale)
     }
 }
+
+extension BookmarkManagerTests {
+
+    func testSwapExchangesStoredBookmarks() throws {
+        let a = try folder("A")
+        let b = try folder("B")
+        BookmarkManager.save(url: a, key: BookmarkManager.sourceKey)
+        BookmarkManager.save(url: b, key: BookmarkManager.destinationKey)
+
+        BookmarkManager.swap(BookmarkManager.sourceKey, BookmarkManager.destinationKey)
+
+        XCTAssertEqual(resolvedPath(BookmarkManager.restore(key: BookmarkManager.sourceKey)),
+                       b.resolvingSymlinksInPath().path)
+        XCTAssertEqual(resolvedPath(BookmarkManager.restore(key: BookmarkManager.destinationKey)),
+                       a.resolvingSymlinksInPath().path)
+    }
+
+    func testSwapWithOneSideEmptyMovesTheBookmark() throws {
+        let a = try folder("A")
+        BookmarkManager.save(url: a, key: BookmarkManager.sourceKey)
+
+        BookmarkManager.swap(BookmarkManager.sourceKey, BookmarkManager.destinationKey)
+
+        guard case .notStored = BookmarkManager.restore(key: BookmarkManager.sourceKey) else {
+            return XCTFail("expected .notStored")
+        }
+        XCTAssertEqual(resolvedPath(BookmarkManager.restore(key: BookmarkManager.destinationKey)),
+                       a.resolvingSymlinksInPath().path)
+    }
+
+    func testSwapKeepsAnUnresolvableBookmark() {
+        let junk = Data("not a bookmark".utf8)
+        BookmarkManager.defaults.set(junk, forKey: BookmarkManager.sourceKey)
+
+        BookmarkManager.swap(BookmarkManager.sourceKey, BookmarkManager.destinationKey)
+
+        XCTAssertEqual(BookmarkManager.defaults.data(forKey: BookmarkManager.destinationKey), junk)
+        XCTAssertNil(BookmarkManager.defaults.data(forKey: BookmarkManager.sourceKey))
+    }
+}

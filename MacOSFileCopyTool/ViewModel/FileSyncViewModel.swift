@@ -83,6 +83,24 @@ final class FileSyncViewModel: ObservableObject {
         BookmarkManager.save(url: url, key: BookmarkManager.destinationKey)
     }
 
+    var canSwapFolders: Bool {
+        !isRunning && !isScanning && !pendingMirrorConfirmation
+            && (sourceURL != nil || destinationURL != nil
+                || sourceBookmarkUnavailable || destinationBookmarkUnavailable)
+    }
+
+    /// Exchanges Source and Destination, including their saved bookmarks and
+    /// "unavailable" warnings, so the swap survives a relaunch.
+    func swapFolders() {
+        guard canSwapFolders else { return }
+        (sourceURL, destinationURL) = (destinationURL, sourceURL)
+        (sourceBookmarkUnavailable, destinationBookmarkUnavailable) =
+            (destinationBookmarkUnavailable, sourceBookmarkUnavailable)
+        BookmarkManager.swap(BookmarkManager.sourceKey, BookmarkManager.destinationKey)
+        // A Mirror scan error was about the old pairing.
+        mirrorScanError = nil
+    }
+
     // MARK: - Sync control
 
     func startSync() {
