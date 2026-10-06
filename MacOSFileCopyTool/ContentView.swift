@@ -199,16 +199,20 @@ struct ContentView: View {
                 setWindowHeight(compactHeight, animated: false)
             }
         }
+        // Every Start or Preview begins from the launch size: the old log and
+        // progress have just been cleared, so the window collapses with them,
+        // and expandForRun() grows it again once the first progress arrives.
+        // Full screen is left alone; a zoomed window is un-zoomed.
+        .onChange(of: vm.runStartCount, perform: { _ in
+            guard let window = NSApp.keyWindow ?? NSApp.windows.first,
+                  !window.styleMask.contains(.fullScreen) else { return }
+            setWindowHeight(compactHeight, width: AppDelegate.defaultWidth, animated: false)
+            // If the first progress landed in the same update, syncHasStarted
+            // never visibly changed, so its onChange won't fire.
+            if vm.syncHasStarted { expandForRun() }
+        })
         .onChange(of: vm.syncHasStarted, perform: { hasStarted in
-            if hasStarted {
-                if let window = NSApp.keyWindow ?? NSApp.windows.first,
-                   !window.styleMask.contains(.fullScreen),
-                   !window.isZoomed {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        setWindowHeight(expandedHeight, animated: true)
-                    }
-                }
-            }
+            if hasStarted { expandForRun() }
         })
         .sheet(isPresented: $vm.pendingMirrorConfirmation) {
             MirrorConfirmationView(
@@ -221,12 +225,24 @@ struct ContentView: View {
 
     // MARK: - Window helpers
 
-    private func setWindowHeight(_ height: CGFloat, animated: Bool) {
+    private func expandForRun() {
+        guard let window = NSApp.keyWindow ?? NSApp.windows.first,
+              !window.styleMask.contains(.fullScreen),
+              !window.isZoomed else { return }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            setWindowHeight(expandedHeight, animated: true)
+        }
+    }
+
+    /// Resizes the window (and its width too, if given), keeping the
+    /// top-left corner stationary.
+    private func setWindowHeight(_ height: CGFloat, width: CGFloat? = nil, animated: Bool) {
         guard let window = NSApp.keyWindow ?? NSApp.windows.first else { return }
 
         var frame = window.frame
         frame.origin.y = frame.maxY - height
         frame.size.height = height
+        if let width { frame.size.width = width }
 
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in

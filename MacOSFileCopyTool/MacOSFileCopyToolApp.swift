@@ -7,6 +7,7 @@ import AppKit
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
+    static let defaultWidth:   CGFloat = 640
     static let compactHeight:  CGFloat = 240
     static let expandedHeight: CGFloat = 620
 
@@ -104,7 +105,7 @@ struct MacOSFileCopyToolApp: App {
                     appDelegate.viewModel = viewModel
                 }
         }
-        .defaultSize(width: 640, height: AppDelegate.compactHeight)
+        .defaultSize(width: AppDelegate.defaultWidth, height: AppDelegate.compactHeight)
         .windowResizability(.contentMinSize)
     }
 }
