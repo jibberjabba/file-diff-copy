@@ -17,7 +17,7 @@ Compares source and destination folders and copies files that are new or changed
 
 - **Dry run / Preview** — see exactly what would be copied or deleted before committing
 - **Live progress** — per-file status, counts (copied / skipped / warnings / deleted / errors), and a progress bar
-- **Mirror confirmation** — before any deletions, shows the list of orphaned files for review
+- **Mirror confirmation** — before any deletions, shows the list of orphaned files for review. Folders that those deletions leave empty are removed too, but a folder that was already empty, still exists in the source, or still holds other files (hidden ones included) is kept
 - **Cancel** — graceful stop mid-sync; partial progress is preserved
 - **Save log** — export the full operation log to a `.txt` file
 - **Bookmark persistence** — source and destination folders are remembered between launches via security-scoped bookmarks
