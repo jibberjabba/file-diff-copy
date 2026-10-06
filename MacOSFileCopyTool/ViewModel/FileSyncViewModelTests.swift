@@ -140,3 +140,82 @@ final class FileSyncViewModelTests: XCTestCase {
         XCTAssertEqual(vm.progress, 1.0)
     }
 }
+
+// MARK: - Swap Source and Destination
+
+extension FileSyncViewModelTests {
+
+    /// Runs `body` with bookmarks stored in a throwaway suite, so swapping never
+    /// touches the folders saved in the real preferences.
+    private func withScratchBookmarks(_ body: () throws -> Void) rethrows {
+        let suiteName = "FileSyncViewModelTests-\(UUID().uuidString)"
+        BookmarkManager.defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            BookmarkManager.defaults.removePersistentDomain(forName: suiteName)
+            BookmarkManager.defaults = .standard
+        }
+        try body()
+    }
+
+    func testSwapExchangesFoldersAndSavedBookmarks() {
+        withScratchBookmarks {
+            let vm = makeViewModel()
+            BookmarkManager.save(url: source, key: BookmarkManager.sourceKey)
+            BookmarkManager.save(url: destination, key: BookmarkManager.destinationKey)
+
+            vm.swapFolders()
+
+            XCTAssertEqual(vm.sourceURL, destination)
+            XCTAssertEqual(vm.destinationURL, source)
+            guard case .success(let savedSource) = BookmarkManager.restore(key: BookmarkManager.sourceKey) else {
+                return XCTFail("source bookmark missing after swap")
+            }
+            XCTAssertEqual(savedSource.resolvingSymlinksInPath().path,
+                           destination.resolvingSymlinksInPath().path)
+        }
+    }
+
+    func testSwapCarriesTheUnavailableWarning() {
+        withScratchBookmarks {
+            let vm = makeViewModel()
+            vm.sourceURL = nil
+            vm.sourceBookmarkUnavailable = true
+
+            vm.swapFolders()
+
+            XCTAssertEqual(vm.sourceURL, destination)
+            XCTAssertNil(vm.destinationURL)
+            XCTAssertFalse(vm.sourceBookmarkUnavailable)
+            XCTAssertTrue(vm.destinationBookmarkUnavailable)
+        }
+    }
+
+    func testSwapIsRefusedWhileRunning() async {
+        let suiteName = "FileSyncViewModelTests-\(UUID().uuidString)"
+        BookmarkManager.defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            BookmarkManager.defaults.removePersistentDomain(forName: suiteName)
+            BookmarkManager.defaults = .standard
+        }
+        let vm = makeViewModel()
+        vm.startSync()
+        XCTAssertFalse(vm.canSwapFolders)
+
+        vm.swapFolders()
+
+        XCTAssertEqual(vm.sourceURL, source)
+        XCTAssertEqual(vm.destinationURL, destination)
+        await vm.activeTask?.value
+    }
+
+    func testSwapClearsAStaleMirrorScanError() {
+        withScratchBookmarks {
+            let vm = makeViewModel()
+            vm.mirrorScanError = "Source folder unavailable"
+
+            vm.swapFolders()
+
+            XCTAssertNil(vm.mirrorScanError)
+        }
+    }
+}

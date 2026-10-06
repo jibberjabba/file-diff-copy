@@ -14,11 +14,25 @@ struct ContentView: View {
             // ── Folder pickers ────────────────────────────────────────────
             GroupBox {
                 VStack(spacing: 6) {
-                    FolderPickerRow(label: "Source:", url: vm.sourceURL) {
-                        vm.chooseSourceFolder()
-                    }
-                    FolderPickerRow(label: "Destination:", url: vm.destinationURL) {
-                        vm.chooseDestinationFolder()
+                    // The swap button sits beside both rows rather than in a row
+                    // of its own, so compactHeight doesn't change.
+                    HStack(spacing: 8) {
+                        VStack(spacing: 6) {
+                            FolderPickerRow(label: "Source:", url: vm.sourceURL) {
+                                vm.chooseSourceFolder()
+                            }
+                            FolderPickerRow(label: "Destination:", url: vm.destinationURL) {
+                                vm.chooseDestinationFolder()
+                            }
+                        }
+                        Button {
+                            vm.swapFolders()
+                        } label: {
+                            Image(systemName: "arrow.up.arrow.down")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(!vm.canSwapFolders)
+                        .help("Swap Source and Destination")
                     }
 
                     Divider()

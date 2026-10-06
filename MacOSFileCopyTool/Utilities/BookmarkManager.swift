@@ -30,6 +30,15 @@ enum BookmarkManager {
         }
     }
 
+    /// Exchanges the bookmarks stored under two keys. The raw data is moved, not
+    /// re-created from URLs, so a bookmark whose volume isn't mounted keeps working.
+    static func swap(_ keyA: String, _ keyB: String) {
+        let dataA = defaults.data(forKey: keyA)
+        let dataB = defaults.data(forKey: keyB)
+        defaults.set(dataB, forKey: keyA)   // nil removes the key
+        defaults.set(dataA, forKey: keyB)
+    }
+
     static func restore(key: String) -> RestoreResult {
         guard let data = defaults.data(forKey: key) else { return .notStored }
 

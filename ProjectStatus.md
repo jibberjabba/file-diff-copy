@@ -140,5 +140,8 @@ Every item from the 2026-10-05 full-codebase review is fixed and merged (PRs #1�
 | Low items | Cancelled runs keep partial progress; unreadable xattr lists reported as errors; `.archive` → `.dateOnly` |
 | App Sandbox removed | The sandbox quarantined every copied file (confirmed `0082;…;File Diff Copy;`), so copied apps and scripts tripped Gatekeeper. Verified 2026-10-06: a copy made by the unsandboxed build has no quarantine |
 
+## Swap Source and Destination (2026-10-06)
+A ⇅ button beside the folder rows exchanges Source and Destination. The saved bookmarks are swapped too, so the new order is kept after a relaunch, and an unavailable-volume warning moves with its folder. Disabled during a run.
+
 ## Next Steps
 None outstanding. Every review item is fixed, and the unsandboxed release build is installed and verified.
