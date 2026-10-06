@@ -46,6 +46,10 @@ final class FileSyncViewModel: ObservableObject {
     private(set) var activeTask: Task<Void, Never>?
     private var prepareTimer: Task<Void, Never>?
     private var syncGeneration = 0
+    /// The current run's uncapped log, written by the engine; Save Log exports it.
+    private var fullLogURL: URL?
+    /// How many entries the on-screen log shows before it stops growing.
+    var logDisplayLimit = FileSyncEngine.defaultMaxLogEntries
 
     // MARK: - Init
 
@@ -137,6 +141,7 @@ final class FileSyncViewModel: ObservableObject {
         deletedCount              = 0
         errorCount                = 0
         logEntries                = []
+        discardFullLog()
     }
 
     // MARK: - Log export
@@ -149,12 +154,27 @@ final class FileSyncViewModel: ObservableObject {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        let content = logEntries.map(\.displayText).joined(separator: "\n")
         do {
-            try content.write(to: url, atomically: true, encoding: .utf8)
+            try writeLog(to: url)
         } catch {
             print("FileSyncViewModel: Failed to save log: \(error.localizedDescription)")
         }
+    }
+
+    /// Writes every entry of the last run, including those past the on-screen cap.
+    func writeLog(to url: URL) throws {
+        if let fullLogURL, FileManager.default.fileExists(atPath: fullLogURL.path) {
+            try Data(contentsOf: fullLogURL).write(to: url, options: .atomic)
+        } else {
+            // The log file couldn't be created; the on-screen entries are all we have.
+            let content = logEntries.map(\.displayText).joined(separator: "\n")
+            try content.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func discardFullLog() {
+        if let fullLogURL { try? FileManager.default.removeItem(at: fullLogURL) }
+        fullLogURL = nil
     }
 
     // MARK: - Private helpers
@@ -227,10 +247,16 @@ final class FileSyncViewModel: ObservableObject {
         errorCount    = 0
         logEntries    = []
 
+        discardFullLog()
+        let logFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FileDiffCopy-\(UUID().uuidString).log")
+        fullLogURL = logFile
+
         let sourceAccess      = source.startAccessingSecurityScopedResource()
         let destinationAccess = destination.startAccessingSecurityScopedResource()
 
         let engine   = FileSyncEngine()
+        engine.maxLogEntries = logDisplayLimit
         activeEngine = engine
         let previous = activeTask
         let mode     = comparisonMode
@@ -240,8 +266,10 @@ final class FileSyncViewModel: ObservableObject {
             // current file — never let two runs touch the destination at once.
             await previous?.value
             await engine.sync(source: source, destination: destination, mode: mode,
-                              dryRun: dryRun, confirmedOrphans: confirmedOrphans) { syncProgress in
-                Task { @MainActor [weak self] in
+                              dryRun: dryRun, confirmedOrphans: confirmedOrphans,
+                              logFile: logFile) { syncProgress in
+                // Awaited by the engine: updates stay in order and never queue up.
+                await MainActor.run { [weak self] in
                     guard let self, self.syncGeneration == generation else { return }
                     self.syncHasStarted = true
                     self.isPreparing    = false
@@ -256,7 +284,7 @@ final class FileSyncViewModel: ObservableObject {
                     self.warningCount  = syncProgress.warningCount
                     self.deletedCount  = syncProgress.deletedCount
                     self.errorCount    = syncProgress.errorCount
-                    self.logEntries    = syncProgress.logEntries
+                    self.logEntries.append(contentsOf: syncProgress.newLogEntries)
                 }
             }
 

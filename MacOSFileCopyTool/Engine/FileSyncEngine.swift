@@ -73,7 +73,9 @@ struct LogEntry: Identifiable {
     }
 }
 
-/// A snapshot of sync progress published after each file is processed.
+/// A snapshot of sync progress. Updates are throttled (see
+/// `FileSyncEngine.progressInterval`), and each one carries only the log entries
+/// added since the previous update — the receiver appends them.
 struct SyncProgress {
     var totalFiles:     Int
     var processedFiles: Int
@@ -83,7 +85,7 @@ struct SyncProgress {
     var deletedCount:   Int
     var errorCount:     Int
     var currentFile:    String
-    var logEntries:     [LogEntry]
+    var newLogEntries:  [LogEntry] = []
     var isDryRun:       Bool = false
 
     var fraction: Double {
@@ -196,18 +198,30 @@ final class FileSyncEngine {
         try FileManager.default.copyItem(at: source, to: destination)
     }
 
+    /// Entries shown in the on-screen log; the rest go only to the full log file.
+    static let defaultMaxLogEntries = 20_000
+    var maxLogEntries = FileSyncEngine.defaultMaxLogEntries
+
+    /// Minimum time between progress updates. The first and last are always sent.
+    var progressInterval: Duration = .milliseconds(100)
+
     // MARK: - Public API
 
     /// - Parameter confirmedOrphans: relative paths the user approved for deletion
     ///   in the Mirror confirmation sheet. A real (non-dry-run) Mirror deletes only
     ///   files that are in this set *and* still orphaned now; `nil` deletes nothing.
+    /// - Parameter logFile: if given, every log entry is written here as text,
+    ///   uncapped — this is what Save Log exports.
+    /// - Parameter onProgress: awaited before the engine continues, so updates
+    ///   arrive in order and never pile up.
     func sync(
         source: URL,
         destination: URL,
         mode: ComparisonMode,
         dryRun: Bool = false,
         confirmedOrphans: Set<String>? = nil,
-        onProgress: @escaping (SyncProgress) -> Void
+        logFile: URL? = nil,
+        onProgress: (SyncProgress) async -> Void
     ) async {
         var progress = SyncProgress(
             totalFiles:     0,
@@ -217,20 +231,33 @@ final class FileSyncEngine {
             warningCount:   0,
             deletedCount:   0,
             errorCount:     0,
-            currentFile:    "",
-            logEntries:     []
+            currentFile:    ""
         )
         progress.isDryRun = dryRun
+
+        let log = RunLog(maxDisplayed: maxLogEntries, file: logFile, logger: logger)
+        defer { log.close() }
+        var lastReport: ContinuousClock.Instant?
+
+        func appendLog(_ entry: LogEntry) { log.append(entry) }
+
+        func report(force: Bool = false) async {
+            let now = ContinuousClock.now
+            if !force, let lastReport, now - lastReport < progressInterval { return }
+            lastReport = now
+            progress.newLogEntries = log.takePending()
+            log.flush()
+            await onProgress(progress)
+        }
 
         // An unmounted volume must stop the run outright — never copy into, or
         // judge orphans against, a folder that isn't there.
         for (label, root) in [("Source", source), ("Destination", destination)]
         where !isReachableDirectory(root) {
             progress.errorCount += 1
-            appendLog(LogEntry(action: .error("\(label) folder is unavailable"), relativePath: root.path),
-                      to: &progress)
+            appendLog(LogEntry(action: .error("\(label) folder is unavailable"), relativePath: root.path))
             progress.currentFile = "\(label) folder is unavailable."
-            onProgress(progress)
+            await report(force: true)
             logger.error("\(label) folder unavailable: \(root.path)")
             return
         }
@@ -238,7 +265,7 @@ final class FileSyncEngine {
         let sourceScan = scan(source)
         for failure in sourceScan.failures {
             progress.errorCount += 1
-            appendLog(LogEntry(action: .error(failure.message), relativePath: failure.path), to: &progress)
+            appendLog(LogEntry(action: .error(failure.message), relativePath: failure.path))
             logger.error("Could not read \(failure.path): \(failure.message)")
         }
 
@@ -254,8 +281,7 @@ final class FileSyncEngine {
             } catch {
                 progress.errorCount += 1
                 appendLog(LogEntry(action: .error("Mirror deletions skipped — \(error.localizedDescription)"),
-                                   relativePath: "(mirror)"),
-                          to: &progress)
+                                   relativePath: "(mirror)"))
                 logger.error("Mirror deletions skipped: \(error.localizedDescription)")
             }
         }
@@ -277,29 +303,27 @@ final class FileSyncEngine {
                     }
                     progress.copiedCount += 1
                     let action: FileSyncAction = dryRun ? .wouldCopy(reason) : .copied(reason)
-                    appendLog(LogEntry(action: action, relativePath: relativePath), to: &progress)
+                    appendLog(LogEntry(action: action, relativePath: relativePath))
                     logger.debug("\(dryRun ? "Would copy" : "Copied"): \(relativePath) (\(reason))")
                 } else if let anomaly = try detectAnomaly(source: file.url,
                                                            destination: destURL,
                                                            mode: mode) {
                     progress.warningCount += 1
-                    appendLog(LogEntry(action: anomaly, relativePath: relativePath), to: &progress)
+                    appendLog(LogEntry(action: anomaly, relativePath: relativePath))
                     logger.debug("Warning \(anomaly) on \(relativePath)")
                 } else {
                     progress.skippedCount += 1
-                    appendLog(LogEntry(action: .skipped, relativePath: relativePath), to: &progress)
+                    appendLog(LogEntry(action: .skipped, relativePath: relativePath))
                 }
             } catch {
                 progress.errorCount += 1
                 appendLog(
-                    LogEntry(action: .error(error.localizedDescription), relativePath: relativePath),
-                    to: &progress
-                )
+                    LogEntry(action: .error(error.localizedDescription), relativePath: relativePath))
                 logger.error("Error on \(relativePath): \(error.localizedDescription)")
             }
 
             progress.processedFiles += 1
-            onProgress(progress)
+            await report()
             await Task.yield()
         }
 
@@ -308,8 +332,7 @@ final class FileSyncEngine {
             if !isReachableDirectory(source) {
                 progress.errorCount += 1
                 appendLog(LogEntry(action: .error("Mirror deletions skipped — the source folder became unavailable"),
-                                   relativePath: "(mirror)"),
-                          to: &progress)
+                                   relativePath: "(mirror)"))
             } else {
                 for orphan in orphans {
                     if isCancelled { break }
@@ -319,7 +342,7 @@ final class FileSyncEngine {
                     // The file may have appeared in the source since the scan.
                     if FileManager.default.fileExists(atPath: source.appendingPathComponent(relativePath).path) {
                         progress.skippedCount += 1
-                        appendLog(LogEntry(action: .skipped, relativePath: relativePath), to: &progress)
+                        appendLog(LogEntry(action: .skipped, relativePath: relativePath))
                     } else {
                         do {
                             if !dryRun {
@@ -327,19 +350,17 @@ final class FileSyncEngine {
                             }
                             progress.deletedCount += 1
                             let action: FileSyncAction = dryRun ? .wouldDelete : .deleted
-                            appendLog(LogEntry(action: action, relativePath: relativePath), to: &progress)
+                            appendLog(LogEntry(action: action, relativePath: relativePath))
                             logger.debug("\(dryRun ? "Would delete" : "Deleted"): \(relativePath)")
                         } catch {
                             progress.errorCount += 1
                             appendLog(
-                                LogEntry(action: .error(error.localizedDescription), relativePath: relativePath),
-                                to: &progress
-                            )
+                                LogEntry(action: .error(error.localizedDescription), relativePath: relativePath))
                             logger.error("Delete failed for \(relativePath): \(error.localizedDescription)")
                         }
                     }
                     progress.processedFiles += 1
-                    onProgress(progress)
+                    await report()
                     await Task.yield()
                 }
             }
@@ -348,7 +369,7 @@ final class FileSyncEngine {
         progress.currentFile = isCancelled ? "Cancelled."
                              : dryRun      ? "Preview complete."
                              :               "Complete."
-        onProgress(progress)
+        await report(force: true)
         logger.debug("Sync finished. Copied: \(progress.copiedCount), Skipped: \(progress.skippedCount), Deleted: \(progress.deletedCount), Errors: \(progress.errorCount)")
     }
 
@@ -405,16 +426,63 @@ final class FileSyncEngine {
         var items: [(path: String, message: String)] = []
     }
 
-    private static let maxLogEntries = 20_000
+    /// One run's log: a capped list for the screen, plus an uncapped text file.
+    private final class RunLog {
+        private let maxDisplayed: Int
+        private var displayedCount = 0
+        private var pending: [LogEntry] = []
+        private var handle: FileHandle?
+        private var buffer = Data()
+        private let logger: Logger
 
-    private func appendLog(_ entry: LogEntry, to progress: inout SyncProgress) {
-        if progress.logEntries.count < Self.maxLogEntries {
-            progress.logEntries.append(entry)
-        } else if progress.logEntries.count == Self.maxLogEntries {
-            progress.logEntries.append(LogEntry(
-                action: .notice("Log truncated at \(Self.maxLogEntries) entries — use Save Log to export all"),
-                relativePath: ""
-            ))
+        init(maxDisplayed: Int, file: URL?, logger: Logger) {
+            self.maxDisplayed = maxDisplayed
+            self.logger = logger
+            guard let file else { return }
+            if FileManager.default.createFile(atPath: file.path, contents: nil) {
+                handle = try? FileHandle(forWritingTo: file)
+            }
+            if handle == nil { logger.error("Could not create log file at \(file.path)") }
+        }
+
+        func append(_ entry: LogEntry) {
+            if handle != nil {
+                buffer.append(contentsOf: (entry.displayText + "\n").utf8)
+                if buffer.count >= 64 * 1024 { flush() }
+            }
+            if displayedCount < maxDisplayed {
+                pending.append(entry)
+            } else if displayedCount == maxDisplayed {
+                pending.append(LogEntry(
+                    action: .notice("Log truncated at \(maxDisplayed) entries — use Save Log to export all"),
+                    relativePath: ""
+                ))
+            } else {
+                return
+            }
+            displayedCount += 1
+        }
+
+        func takePending() -> [LogEntry] {
+            defer { pending = [] }
+            return pending
+        }
+
+        func flush() {
+            guard let handle, !buffer.isEmpty else { return }
+            do {
+                try handle.write(contentsOf: buffer)
+            } catch {
+                logger.error("Could not write log file: \(error.localizedDescription)")
+                self.handle = nil
+            }
+            buffer = Data()
+        }
+
+        func close() {
+            flush()
+            try? handle?.close()
+            handle = nil
         }
     }
 

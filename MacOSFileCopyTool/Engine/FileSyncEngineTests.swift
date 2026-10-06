@@ -42,17 +42,34 @@ final class FileSyncEngineTests: XCTestCase {
         fm.fileExists(atPath: url.path)
     }
 
+    /// The final progress snapshot plus every log entry from all the updates.
+    @dynamicMemberLookup
+    private struct RunResult {
+        let final: SyncProgress
+        let logEntries: [LogEntry]
+        let updateCount: Int
+        subscript<T>(dynamicMember keyPath: KeyPath<SyncProgress, T>) -> T { final[keyPath: keyPath] }
+    }
+
     private func run(
         _ engine: FileSyncEngine = FileSyncEngine(),
         source: URL? = nil,
         mode: ComparisonMode = .fast,
         dryRun: Bool = false,
-        confirmedOrphans: Set<String>? = nil
-    ) async -> SyncProgress {
+        confirmedOrphans: Set<String>? = nil,
+        logFile: URL? = nil
+    ) async -> RunResult {
         var last: SyncProgress?
+        var entries: [LogEntry] = []
+        var updates = 0
         await engine.sync(source: source ?? self.source, destination: destination, mode: mode,
-                          dryRun: dryRun, confirmedOrphans: confirmedOrphans) { last = $0 }
-        return last!
+                          dryRun: dryRun, confirmedOrphans: confirmedOrphans,
+                          logFile: logFile) { progress in
+            last = progress
+            entries += progress.newLogEntries
+            updates += 1
+        }
+        return RunResult(final: last!, logEntries: entries, updateCount: updates)
     }
 
     // MARK: - C1: Mirror never deletes on an untrustworthy source
@@ -324,7 +341,7 @@ final class FileSyncEngineTests: XCTestCase {
                          to: destination.appendingPathComponent("notes.txt"), date: newer)
     }
 
-    private func assertKeptAsNewerDestination(_ result: SyncProgress, _ destFile: URL,
+    private func assertKeptAsNewerDestination(_ result: RunResult, _ destFile: URL,
                                               file: StaticString = #filePath, line: UInt = #line) throws {
         XCTAssertEqual(result.copiedCount, 0, file: file, line: line)
         XCTAssertEqual(result.warningCount, 1, file: file, line: line)
@@ -396,6 +413,69 @@ final class FileSyncEngineTests: XCTestCase {
         XCTAssertEqual(result.copiedCount, 0, "Preview must not claim it would replace a folder")
         XCTAssertEqual(result.errorCount, 1)
         XCTAssertTrue(exists(inner))
+    }
+
+    // MARK: - H3: Save Log exports every entry, not just the on-screen ones
+
+    private func writeFiles(_ count: Int) throws {
+        for i in 0..<count {
+            try write("file \(i)", to: source.appendingPathComponent(String(format: "f%03d.txt", i)))
+        }
+    }
+
+    func testLogFileHasEveryEntryWhenScreenLogIsCapped() async throws {
+        try writeFiles(12)
+        let engine = FileSyncEngine()
+        engine.maxLogEntries = 5
+        let logFile = root.appendingPathComponent("full.log")
+
+        let result = await run(engine, logFile: logFile)
+
+        // On screen: 5 entries, then the truncation notice, then nothing.
+        XCTAssertEqual(result.logEntries.count, 6)
+        guard case .notice = result.logEntries.last?.action else {
+            return XCTFail("Expected the truncation notice last")
+        }
+        // In the file: all 12, in the on-screen text format (enumeration order).
+        let lines = try read(logFile).split(separator: "\n").map(String.init)
+        let expected = (0..<12).map { String(format: "[COPIED]     f%03d.txt  (new file)", $0) }
+        XCTAssertEqual(lines.count, 12)
+        XCTAssertEqual(Set(lines), Set(expected))
+    }
+
+    func testLogFileRecordsRunLevelErrors() async throws {
+        let logFile = root.appendingPathComponent("full.log")
+
+        _ = await run(source: root.appendingPathComponent("unmounted"), logFile: logFile)
+
+        XCTAssertTrue(try read(logFile).hasPrefix("[ERROR]"))
+    }
+
+    // MARK: - H4: progress updates are throttled deltas, not whole-log copies
+
+    func testProgressUpdatesCarryOnlyNewEntries() async throws {
+        try writeFiles(50)
+        let engine = FileSyncEngine()
+        engine.progressInterval = .zero   // an update per file
+
+        let result = await run(engine)
+
+        XCTAssertEqual(result.updateCount, 51, "one per file plus the final update")
+        XCTAssertEqual(result.logEntries.count, 50, "each entry must arrive exactly once")
+        XCTAssertEqual(Set(result.logEntries.map(\.relativePath)).count, 50)
+    }
+
+    func testProgressUpdatesAreThrottled() async throws {
+        try writeFiles(50)
+        let engine = FileSyncEngine()
+        engine.progressInterval = .seconds(60)
+
+        let result = await run(engine)
+
+        XCTAssertEqual(result.updateCount, 2, "the first file and the final update only")
+        XCTAssertEqual(result.logEntries.count, 50, "throttling must not lose entries")
+        XCTAssertEqual(result.copiedCount, 50)
+        XCTAssertEqual(result.processedFiles, 50)
     }
 
     // MARK: - C5: cancellation is sticky
