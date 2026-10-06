@@ -375,6 +375,7 @@ final class FileSyncEngine {
                 appendLog(LogEntry(action: .error("Mirror deletions skipped — the source folder became unavailable"),
                                    relativePath: "(mirror)"))
             } else {
+                var removed = Set<String>()
                 for orphan in orphans {
                     if isCancelled { break }
                     let relativePath = orphan.relativePath
@@ -390,6 +391,7 @@ final class FileSyncEngine {
                                 try FileManager.default.removeItem(at: orphan.url)
                             }
                             progress.deletedCount += 1
+                            removed.insert(relativePath)
                             let action: FileSyncAction = dryRun ? .wouldDelete : .deleted
                             appendLog(LogEntry(action: action, relativePath: relativePath))
                             logger.debug("\(dryRun ? "Would delete" : "Deleted"): \(relativePath)")
@@ -403,6 +405,20 @@ final class FileSyncEngine {
                     progress.processedFiles += 1
                     await report()
                     await Task.yield()
+                }
+
+                // Folders those deletions emptied go too, deepest first.
+                if !isCancelled {
+                    for folder in foldersLeftEmpty(after: removed, source: source, destination: destination) {
+                        if dryRun || Self.removeEmptyFolder(destination.appendingPathComponent(folder)) {
+                            progress.deletedCount += 1
+                            appendLog(LogEntry(action: dryRun ? .wouldDelete : .deleted, relativePath: folder + "/"))
+                        } else {
+                            appendLog(LogEntry(action: .notice("Kept folder \(folder)/ — it is no longer empty"),
+                                               relativePath: folder))
+                        }
+                    }
+                    await report()
                 }
             }
         }
@@ -577,6 +593,53 @@ final class FileSyncEngine {
             !sourcePaths.contains(file.relativePath)
                 && !FileManager.default.fileExists(atPath: source.appendingPathComponent(file.relativePath).path)
         }
+    }
+
+    /// Destination folders that the Mirror deletions in `removed` leave empty,
+    /// deepest first. Only folders above a removed file are considered, so a
+    /// folder that was already empty is never touched. A folder that exists in
+    /// the source is kept. Finder's `.DS_Store` doesn't count as content; any
+    /// other item (hidden files included) keeps the folder.
+    func foldersLeftEmpty(after removed: Set<String>, source: URL, destination: URL) -> [String] {
+        let fm = FileManager.default
+        var candidates = Set<String>()
+        for path in removed {
+            var folder = (path as NSString).deletingLastPathComponent
+            while !folder.isEmpty {
+                candidates.insert(folder)
+                folder = (folder as NSString).deletingLastPathComponent
+            }
+        }
+
+        var empty: [String] = []
+        let deepestFirst = candidates.sorted {
+            let (a, b) = ($0.split(separator: "/").count, $1.split(separator: "/").count)
+            return a != b ? a > b : $0 < $1
+        }
+        for folder in deepestFirst {
+            var isDirectory: ObjCBool = false
+            if fm.fileExists(atPath: source.appendingPathComponent(folder).path, isDirectory: &isDirectory),
+               isDirectory.boolValue { continue }
+            guard let entries = try? fm.contentsOfDirectory(atPath: destination.appendingPathComponent(folder).path)
+            else { continue }
+            let willBeEmpty = entries.allSatisfy { name in
+                let child = folder + "/" + name
+                return name == ".DS_Store" || removed.contains(child) || empty.contains(child)
+            }
+            if willBeEmpty { empty.append(folder) }
+        }
+        return empty
+    }
+
+    /// Removes `folder` only if it is empty apart from a `.DS_Store`. `rmdir`
+    /// refuses a non-empty folder, so anything added since the check survives.
+    static func removeEmptyFolder(_ folder: URL) -> Bool {
+        let dsStore = folder.appendingPathComponent(".DS_Store")
+        if let entries = try? FileManager.default.contentsOfDirectory(atPath: folder.path),
+           entries == [".DS_Store"] {
+            try? FileManager.default.removeItem(at: dsStore)
+        }
+        return rmdir(folder.path) == 0
     }
 
     /// The enumerator may report children under a different spelling of the root

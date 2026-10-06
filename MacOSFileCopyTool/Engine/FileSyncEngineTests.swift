@@ -124,7 +124,7 @@ final class FileSyncEngineTests: XCTestCase {
         let result = await run(mode: .mirror, dryRun: true)
 
         XCTAssertTrue(exists(orphan))
-        XCTAssertEqual(result.deletedCount, 1)
+        XCTAssertEqual(result.deletedCount, 2, "the orphan and the folder it leaves empty (M4)")
         XCTAssertTrue(result.logEntries.contains { $0.relativePath == "sub/orphan.txt" })
     }
 
@@ -772,6 +772,103 @@ final class FileSyncEngineTests: XCTestCase {
         XCTAssertEqual(bytesRead, 2 * chunk, "one chunk of each file, then stop")
         XCTAssertEqual(result.errorCount, 0)
         XCTAssertEqual(result.currentFile, "Cancelled.")
+    }
+
+    // MARK: - M4: Mirror removes the folders its deletions leave empty
+
+    private func isFolder(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return fm.fileExists(atPath: destination.appendingPathComponent(path).path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
+    private func mirrorAll() async throws -> RunResult {
+        let orphans = try await FileSyncEngine().findOrphans(source: source, destination: destination)
+        return await run(mode: .mirror, confirmedOrphans: Set(orphans))
+    }
+
+    func testMirrorRemovesFoldersLeftEmpty() async throws {
+        try write("keep", to: source.appendingPathComponent("keep.txt"))
+        try write("x", to: destination.appendingPathComponent("orphan_subdir/a.txt"))
+        try write("x", to: destination.appendingPathComponent("nested/deep/b.txt"))
+        try write("x", to: destination.appendingPathComponent("finder/c.txt"))
+        try write("", to: destination.appendingPathComponent("finder/.DS_Store"))
+
+        let result = try await mirrorAll()
+
+        for folder in ["orphan_subdir", "nested/deep", "nested", "finder"] {
+            XCTAssertFalse(isFolder(folder), "\(folder) should be removed")
+        }
+        XCTAssertEqual(result.deletedCount, 3 + 4)
+        let deletedFolders = result.logEntries.filter {
+            if case .deleted = $0.action { return $0.relativePath.hasSuffix("/") } else { return false }
+        }.map(\.relativePath)
+        XCTAssertEqual(deletedFolders, ["nested/deep/", "finder/", "nested/", "orphan_subdir/"], "deepest first")
+    }
+
+    func testMirrorKeepsFoldersThatStillHaveContent() async throws {
+        try write("keep", to: source.appendingPathComponent("keep.txt"))
+        try fm.createDirectory(at: source.appendingPathComponent("in_source"), withIntermediateDirectories: true)
+        try write("x", to: destination.appendingPathComponent("unconfirmed/a.txt"))
+        try write("x", to: destination.appendingPathComponent("unconfirmed/b.txt"))
+        try write("x", to: destination.appendingPathComponent("hidden/c.txt"))
+        try write("x", to: destination.appendingPathComponent("hidden/.keep"))
+        try write("x", to: destination.appendingPathComponent("in_source/d.txt"))
+        try fm.createDirectory(at: destination.appendingPathComponent("already_empty"), withIntermediateDirectories: true)
+
+        let result = await run(mode: .mirror,
+                               confirmedOrphans: ["unconfirmed/a.txt", "hidden/c.txt", "in_source/d.txt"])
+
+        XCTAssertEqual(result.deletedCount, 3, "files only — every folder stays")
+        XCTAssertTrue(exists(destination.appendingPathComponent("unconfirmed/b.txt")))
+        XCTAssertTrue(exists(destination.appendingPathComponent("hidden/.keep")))
+        XCTAssertTrue(isFolder("in_source"), "the folder exists in the source")
+        XCTAssertTrue(isFolder("already_empty"), "not emptied by this run, so not ours to remove")
+    }
+
+    func testMirrorPreviewReportsFoldersWithoutRemoving() async throws {
+        try write("keep", to: source.appendingPathComponent("keep.txt"))
+        let orphan = try write("x", to: destination.appendingPathComponent("a/b/c.txt"))
+
+        let result = await run(mode: .mirror, dryRun: true)
+
+        XCTAssertTrue(exists(orphan))
+        XCTAssertEqual(result.deletedCount, 3)
+        let wouldDelete = result.logEntries.filter {
+            if case .wouldDelete = $0.action { return true } else { return false }
+        }.map(\.relativePath)
+        XCTAssertEqual(wouldDelete, ["a/b/c.txt", "a/b/", "a/"])
+    }
+
+    func testEmptyFolderRemovalNeverDeletesContent() throws {
+        // A file can appear between the emptiness check and the removal (e.g.
+        // another sync writing into the folder). The removal must then fail
+        // rather than take the file with it.
+        let folder = destination.appendingPathComponent("raced")
+        let arrived = try write("new", to: folder.appendingPathComponent("arrived.txt"))
+        try write("", to: folder.appendingPathComponent(".DS_Store"))
+
+        XCTAssertFalse(FileSyncEngine.removeEmptyFolder(folder))
+        XCTAssertTrue(exists(arrived))
+
+        let finderOnly = destination.appendingPathComponent("finder_only")
+        try write("", to: finderOnly.appendingPathComponent(".DS_Store"))
+        XCTAssertTrue(FileSyncEngine.removeEmptyFolder(finderOnly))
+        XCTAssertFalse(exists(finderOnly))
+    }
+
+    func testMirrorReplacesFolderCollisionOnNextRun() async throws {
+        // Fixture 11: a source file next to a destination folder of the same name.
+        // Once the folder's files are deleted and the folder is gone, the next
+        // run can copy the file in.
+        try write("a file", to: source.appendingPathComponent("collision"))
+        try write("x", to: destination.appendingPathComponent("collision/keep_me.txt"))
+
+        _ = try await mirrorAll()
+        let second = try await mirrorAll()
+
+        XCTAssertEqual(second.copiedCount, 1)
+        XCTAssertEqual(try read(destination.appendingPathComponent("collision")), "a file")
     }
 
     // MARK: - C5: cancellation is sticky

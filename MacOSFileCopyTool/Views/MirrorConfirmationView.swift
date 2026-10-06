@@ -25,7 +25,7 @@ struct MirrorConfirmationView: View {
                         Text("No files will be deleted — the destination is already a mirror of the source.")
                             .foregroundColor(.secondary)
                     } else {
-                        Text("\(orphanPaths.count) file\(orphanPaths.count == 1 ? "" : "s") at the destination will be permanently deleted. This cannot be undone.")
+                        Text("\(orphanPaths.count) file\(orphanPaths.count == 1 ? "" : "s") at the destination will be permanently deleted, along with any folders left empty. This cannot be undone.")
                             .foregroundColor(.secondary)
                     }
                 }
