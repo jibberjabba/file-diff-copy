@@ -594,6 +594,78 @@ final class FileSyncEngineTests: XCTestCase {
         XCTAssertTrue(result.logEntries.contains { $0.displayText.contains("(metadata changed)") })
     }
 
+    // MARK: - M2: Thorough compares bytes and stops at the first difference
+
+    private let chunk = FileSyncEngine.compareChunkSize
+
+    /// Same size and date on both sides, so only the content comparison decides.
+    private func makeThoroughPair(chunks: Int, differAt offset: Int?) throws {
+        var bytes = Data(repeating: 0xA5, count: chunks * chunk)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let src = source.appendingPathComponent("big.bin"), dst = destination.appendingPathComponent("big.bin")
+        try bytes.write(to: src)
+        if let offset { bytes[offset] ^= 0xFF }
+        try bytes.write(to: dst)
+        for url in [src, dst] { try fm.setAttributes([.modificationDate: date], ofItemAtPath: url.path) }
+    }
+
+    /// An engine whose content reads are counted.
+    private func countingEngine(_ bytesRead: @escaping (Int) -> Void) -> FileSyncEngine {
+        let engine = FileSyncEngine()
+        let read = engine.readChunk
+        engine.readChunk = { handle, count in
+            let data = try read(handle, count); bytesRead(data.count); return data
+        }
+        return engine
+    }
+
+    func testThoroughStopsReadingAtFirstDifference() async throws {
+        try makeThoroughPair(chunks: 8, differAt: 10)
+        var bytesRead = 0
+
+        let result = await run(countingEngine { bytesRead += $0 }, mode: .thorough)
+
+        XCTAssertEqual(result.copiedCount, 1)
+        XCTAssertTrue(result.logEntries.contains { $0.displayText.contains("(content changed)") })
+        XCTAssertEqual(bytesRead, 2 * chunk, "one chunk from each file, not all \(16 * chunk) bytes")
+    }
+
+    func testThoroughDetectsDifferenceInLastByte() async throws {
+        try makeThoroughPair(chunks: 3, differAt: 3 * chunk - 1)
+
+        let result = await run(mode: .thorough)
+
+        XCTAssertEqual(result.copiedCount, 1)
+    }
+
+    func testThoroughSkipsIdenticalMultiChunkFiles() async throws {
+        try makeThoroughPair(chunks: 3, differAt: nil)
+        var bytesRead = 0
+
+        let result = await run(countingEngine { bytesRead += $0 }, mode: .thorough)
+
+        XCTAssertEqual(result.copiedCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+        XCTAssertEqual(bytesRead, 6 * chunk)
+    }
+
+    func testThoroughToleratesShortReads() async throws {
+        // A network filesystem can return fewer bytes than asked for before the
+        // end of the file; that must not look like a content difference.
+        try makeThoroughPair(chunks: 2, differAt: nil)
+        let engine = FileSyncEngine()
+        var calls = 0
+        engine.readChunk = { handle, count in
+            calls += 1
+            return try handle.read(upToCount: calls.isMultiple(of: 3) ? min(count, 4096) : count) ?? Data()
+        }
+
+        let result = await run(engine, mode: .thorough)
+
+        XCTAssertEqual(result.copiedCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+    }
+
     // MARK: - C5: cancellation is sticky
 
     func testCancelledEngineStaysCancelledWhenSyncIsCalled() async throws {

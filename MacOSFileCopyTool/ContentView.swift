@@ -49,7 +49,7 @@ struct ContentView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(.orange)
-                            Text("SHA-256 checksums every file on both sides — may be slow on large folders.")
+                            Text("Reads files on both sides to compare contents — may be slow on large folders.")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }

@@ -54,8 +54,8 @@ Created at `~/Desktop/FileCopyTest/` (2026-05-28). Reset script: `TestFixtures/r
 ### Thorough Mode — PASSED (2026-05-28)
 | # | Scenario | Expected | Result |
 |---|----------|----------|--------|
-| 1 | `checksum_only.txt` | `[COPIED]` checksum differed | PASS |
-| 2 | SHA-256 warning label visible | Orange warning below picker | PASS |
+| 1 | `checksum_only.txt` | `[COPIED]` content changed | PASS |
+| 2 | Thorough warning label visible | Orange warning below picker | PASS |
 | 3 | All others | Same results as Fast mode | PASS |
 
 ### Date Only Mode — PASSED (2026-05-28)

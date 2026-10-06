@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import os
 
@@ -10,7 +9,7 @@ enum CopyReason: CustomStringConvertible {
     case sizeChanged
     case dateNewer
     case xattrChanged
-    case checksumDiffered
+    case contentDiffered
 
     var description: String {
         switch self {
@@ -18,7 +17,7 @@ enum CopyReason: CustomStringConvertible {
         case .sizeChanged:      return "size changed"
         case .dateNewer:        return "source is newer"
         case .xattrChanged:     return "metadata changed"
-        case .checksumDiffered: return "content changed"
+        case .contentDiffered:  return "content changed"
         }
     }
 }
@@ -120,7 +119,7 @@ enum ComparisonMode: CaseIterable, Hashable {
         case .fast:
             return "Size + modification date"
         case .thorough:
-            return "SHA-256 checksum + extended attributes — detects any content or metadata change"
+            return "Byte-by-byte content + extended attributes — detects any content or metadata change"
         case .archive:
             return "Modification date only — copy when source is newer; identical dates skip regardless of size"
         case .mirror:
@@ -211,6 +210,12 @@ final class FileSyncEngine {
     /// File-copy primitive. Tests replace it to simulate a copy failing part-way.
     var copyItem: (URL, URL) throws -> Void = { source, destination in
         try FileManager.default.copyItem(at: source, to: destination)
+    }
+
+    /// Reads up to `count` bytes. Tests replace it to count how much of a file
+    /// the content comparison actually reads.
+    var readChunk: (FileHandle, Int) throws -> Data = { handle, count in
+        try handle.read(upToCount: count) ?? Data()
     }
 
     /// Entries shown in the on-screen log; the rest go only to the full log file.
@@ -608,13 +613,13 @@ final class FileSyncEngine {
             return srcSec > dstSec ? .dateNewer : nil
 
         case .thorough:
-            // Size (fast-reject), xattrs (cheap metadata check), then full SHA-256.
+            // Size (fast-reject), xattrs (cheap metadata check), then the bytes.
             let srcValues = try source.resourceValues(forKeys: [.fileSizeKey])
             let dstValues = try destination.resourceValues(forKeys: [.fileSizeKey])
             if let srcSize = srcValues.fileSize, let dstSize = dstValues.fileSize,
                srcSize != dstSize { return .sizeChanged }
             if !xattrsMatch(source: source, destination: destination) { return .xattrChanged }
-            return try sha256(of: source) != sha256(of: destination) ? .checksumDiffered : nil
+            return try contentsDiffer(source, destination) ? .contentDiffered : nil
 
         case .archive:
             // Date only — size differences intentionally ignored.
@@ -659,14 +664,38 @@ final class FileSyncEngine {
              > srcDate.timeIntervalSinceReferenceDate.rounded(.down)
     }
 
-    private func sha256(of url: URL) throws -> SHA256Digest {
-        var hasher = SHA256()
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-        while let chunk = try handle.read(upToCount: 1_048_576), !chunk.isEmpty {
-            hasher.update(data: chunk)
+    static let compareChunkSize = 1_048_576
+
+    /// Compares the two files a chunk at a time and stops at the first chunk that
+    /// differs. Hashing both files would always read every byte of both, and the
+    /// digests aren't kept between runs, so a hash buys nothing here.
+    func contentsDiffer(_ a: URL, _ b: URL) throws -> Bool {
+        let handleA = try FileHandle(forReadingFrom: a)
+        defer { try? handleA.close() }
+        let handleB = try FileHandle(forReadingFrom: b)
+        defer { try? handleB.close() }
+
+        while true {
+            // Each chunk is an autoreleased NSData; without the pool a multi-GB
+            // comparison keeps every chunk alive until the whole file is done.
+            let (chunkA, chunkB) = try autoreleasepool {
+                (try readFully(handleA), try readFully(handleB))
+            }
+            if chunkA != chunkB { return true }
+            if chunkA.isEmpty { return false }   // both at end of file
         }
-        return hasher.finalize()
+    }
+
+    /// One full chunk, or less only at end of file. A network filesystem may
+    /// return short reads, which must not be mistaken for a difference.
+    private func readFully(_ handle: FileHandle) throws -> Data {
+        var data = Data()
+        while data.count < Self.compareChunkSize {
+            let piece = try readChunk(handle, Self.compareChunkSize - data.count)
+            if piece.isEmpty { break }
+            data.append(piece)
+        }
+        return data
     }
 
     private func xattrsMatch(source: URL, destination: URL) -> Bool {
