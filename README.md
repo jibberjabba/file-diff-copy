@@ -49,7 +49,7 @@ Sync runs as a Swift `async` task so the UI stays responsive. `Task.yield()` is 
 
 **Fast / Mirror:** size first (fast reject), then modification date rounded to the nearest second.
 
-**Thorough:** size first, then extended attributes (cheap metadata check), then full SHA-256 of file contents. Ignores `com.apple.quarantine` and `com.apple.lastuseddate#PS` xattrs.
+**Thorough:** size first, then extended attributes (cheap metadata check), then full SHA-256 of file contents. Ignores xattrs that macOS writes by itself (`com.apple.quarantine`, `lastuseddate#PS`, `macl`, `provenance`, Spotlight `kMDLabel_*`), so opening a file in another app doesn't make it look changed.
 
 **Date Only (Archive):** modification date only — size differences are logged as warnings (`[SIZE DIFF]`) but do not trigger a copy.
 

@@ -690,7 +690,7 @@ final class FileSyncEngine {
                 String(cString: ptr.baseAddress!.advanced(by: offset))
             }
             offset += name.utf8.count + 1
-            guard !Self.ignoredXattrNames.contains(name) else { continue }
+            guard !Self.isIgnoredXattr(name) else { continue }
 
             let dataSize = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
             guard dataSize > 0 else { continue }
@@ -703,10 +703,21 @@ final class FileSyncEngine {
         return result
     }
 
+    /// xattrs macOS writes on its own, for bookkeeping rather than as part of the
+    /// file. They are still copied; they just never make Thorough re-copy a file.
     private static let ignoredXattrNames: Set<String> = [
-        "com.apple.quarantine",
-        "com.apple.lastuseddate#PS",
+        "com.apple.quarantine",       // Gatekeeper; the sandbox also stamps it on every file the app writes
+        "com.apple.lastuseddate#PS",  // Launch Services, updated whenever the file is opened
+        "com.apple.macl",             // sandbox access grants, added when the file is opened in a sandboxed app
+        "com.apple.provenance",       // Gatekeeper's record of the app that created the file
     ]
+    private static let ignoredXattrPrefixes = [
+        "com.apple.metadata:kMDLabel_",  // private Spotlight labels written by system services
+    ]
+
+    static func isIgnoredXattr(_ name: String) -> Bool {
+        ignoredXattrNames.contains(name) || ignoredXattrPrefixes.contains { name.hasPrefix($0) }
+    }
 
     private func performCopy(source: URL, destination: URL) throws {
         let fm = FileManager.default
