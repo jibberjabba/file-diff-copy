@@ -83,6 +83,11 @@ mkdir -p "$BASE/destination/collision"
 echo "I live in a destination folder." > "$BASE/destination/collision/keep_me.txt"
 touch -t 202605271200 "$BASE/destination/collision/keep_me.txt"
 
+# ── 12. IGNORED ITEMS — hidden file + symlink in source (H5) ─────────────────
+# Never copied in any mode: expect two [IGNORED] entries and "2 Ignored".
+echo "API_KEY=not-copied" > "$BASE/source/.hidden_config"
+ln -s new_file.txt "$BASE/source/link_to_new.txt"
+
 # ── Verify ────────────────────────────────────────────────────────────────────
 echo ""
 echo "=== SOURCE ==="

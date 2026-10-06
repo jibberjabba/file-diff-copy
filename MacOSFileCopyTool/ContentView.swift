@@ -139,6 +139,7 @@ struct ContentView: View {
                         skippedCount:  vm.skippedCount,
                         warningCount:  vm.warningCount,
                         deletedCount:  vm.deletedCount,
+                        ignoredCount:  vm.ignoredCount,
                         errorCount:    vm.errorCount,
                         isDryRun:      vm.isDryRun
                     )

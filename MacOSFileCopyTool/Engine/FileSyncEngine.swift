@@ -35,6 +35,7 @@ enum FileSyncAction: CustomStringConvertible {
     case newerDestination       // dst mod-date is strictly newer than src
     case sizeMismatch           // same date but different sizes (Date Only mode only)
     case notice(String)         // informational message, not a file action
+    case ignored(String)        // source item the app never copies (hidden, symlink, …)
     case error(String)
 
     var description: String {
@@ -47,6 +48,7 @@ enum FileSyncAction: CustomStringConvertible {
         case .newerDestination: return "newerDestination"
         case .sizeMismatch:     return "sizeMismatch"
         case .notice(let msg):  return "notice(\(msg))"
+        case .ignored(let r):   return "ignored(\(r))"
         case .error(let r):     return "error(\(r))"
         }
     }
@@ -68,6 +70,7 @@ struct LogEntry: Identifiable {
         case .newerDestination: return "[NEWER DST]  \(relativePath)"
         case .sizeMismatch:     return "[SIZE DIFF]  \(relativePath)"
         case .notice(let msg):  return "[NOTE]       \(msg)"
+        case .ignored(let r):   return "[IGNORED]    \(relativePath)  (\(r))"
         case .error(let r):     return "[ERROR]      \(relativePath) — \(r)"
         }
     }
@@ -83,6 +86,7 @@ struct SyncProgress {
     var skippedCount:   Int
     var warningCount:   Int
     var deletedCount:   Int
+    var ignoredCount:   Int = 0
     var errorCount:     Int
     var currentFile:    String
     var newLogEntries:  [LogEntry] = []
@@ -138,6 +142,17 @@ struct ScannedFile {
 struct ScanResult {
     var files:    [ScannedFile] = []
     var failures: [(path: String, message: String)] = []
+    /// Items that are deliberately not synced, with the reason.
+    var ignored:  [(relativePath: String, reason: String)] = []
+}
+
+/// Why a scanned item is not synced. Hidden folders count as one item; their
+/// contents are not walked.
+enum IgnoreReason {
+    static let hiddenFile   = "hidden file — not copied"
+    static let hiddenFolder = "hidden folder — not copied"
+    static let symlink      = "symbolic link — not followed"
+    static let special      = "not a regular file or folder"
 }
 
 /// Per-file errors the engine raises itself (reported in the log like I/O errors).
@@ -268,6 +283,10 @@ final class FileSyncEngine {
             appendLog(LogEntry(action: .error(failure.message), relativePath: failure.path))
             logger.error("Could not read \(failure.path): \(failure.message)")
         }
+        for item in sourceScan.ignored {
+            progress.ignoredCount += 1
+            appendLog(LogEntry(action: .ignored(item.reason), relativePath: item.relativePath))
+        }
 
         // Pre-scan orphans for Mirror so their count is in the progress denominator.
         var orphans: [ScannedFile] = []
@@ -392,8 +411,10 @@ final class FileSyncEngine {
 
         guard let enumerator = FileManager.default.enumerator(
             at: resolvedRoot,
-            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
-            options: [.skipsHiddenFiles],
+            includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey,
+                                         .isHiddenKey, .contentModificationDateKey, .fileSizeKey],
+            // Not .skipsHiddenFiles: hidden items are skipped below, but reported.
+            options: [],
             errorHandler: { url, error in
                 enumerationFailures.items.append((url.path, error.localizedDescription))
                 return true   // keep going; the failure is reported, not ignored
@@ -406,18 +427,41 @@ final class FileSyncEngine {
         let prefixes = Self.rootPrefixes(for: resolvedRoot)
         for case let url as URL in enumerator {
             do {
-                guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
+                let values = try url.resourceValues(
+                    forKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .isHiddenKey])
+                let isDirectory = values.isDirectory == true
+                if values.isHidden == true, isDirectory { enumerator.skipDescendants() }
+                // Plain folders aren't synced themselves; their files are.
+                if isDirectory && values.isHidden != true { continue }
+
                 guard let relativePath = Self.relativePath(of: url, prefixes: prefixes) else {
                     result.failures.append((url.path, "Path is outside the scanned folder"))
                     continue
                 }
-                result.files.append(ScannedFile(url: url, relativePath: relativePath))
+                if values.isHidden == true {
+                    if !Self.isSilentlyIgnored(url.lastPathComponent) {
+                        result.ignored.append((relativePath,
+                                               isDirectory ? IgnoreReason.hiddenFolder : IgnoreReason.hiddenFile))
+                    }
+                } else if values.isSymbolicLink == true {
+                    result.ignored.append((relativePath, IgnoreReason.symlink))
+                } else if values.isRegularFile == true {
+                    result.files.append(ScannedFile(url: url, relativePath: relativePath))
+                } else {
+                    result.ignored.append((relativePath, IgnoreReason.special))
+                }
             } catch {
                 result.failures.append((url.path, error.localizedDescription))
             }
         }
         result.failures += enumerationFailures.items
         return result
+    }
+
+    /// Hidden files not worth a log line: Finder's per-folder `.DS_Store`, and
+    /// this app's own temp files left behind by a crash mid-copy.
+    static func isSilentlyIgnored(_ name: String) -> Bool {
+        name == ".DS_Store" || (name.hasPrefix(".fdc-") && name.hasSuffix(".tmp"))
     }
 
     // MARK: - Private helpers

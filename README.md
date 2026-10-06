@@ -68,6 +68,6 @@ Sync runs as a Swift `async` task so the UI stays responsive. `Task.yield()` is 
 
 ## Things to know
 
-- Hidden files (dotfiles) are skipped during enumeration.
+- Hidden files and folders (dotfiles), symbolic links and special files (pipes, sockets) are not copied. Each one in the source is listed in the log as `[IGNORED]` with the reason and counted under "Ignored". A hidden folder is one entry; its contents aren't scanned. `.DS_Store` files are skipped without a log line. Mirror never deletes hidden items at the destination.
 - The log is capped at 20,000 entries in memory; use **Save Log** to export all entries for large syncs.
 - Mirror mode scans for orphans before the sync starts so the total file count includes deletions in the progress bar.
