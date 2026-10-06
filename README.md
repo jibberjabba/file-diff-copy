@@ -9,7 +9,7 @@ Compares source and destination folders and copies files that are new or changed
 | Mode | How it compares files |
 |------|-----------------------|
 | **Fast** | Size + modification date |
-| **Thorough** | SHA-256 checksum + extended attributes — catches any content or metadata change |
+| **Thorough** | Byte-by-byte content + extended attributes — catches any content or metadata change |
 | **Date Only** | Modification date only — copies when source is newer; ignores size differences |
 | **Mirror** | Fast copy, then deletes destination files not present in source |
 
@@ -49,7 +49,7 @@ Sync runs as a Swift `async` task so the UI stays responsive. `Task.yield()` is 
 
 **Fast / Mirror:** size first (fast reject), then modification date rounded to the nearest second.
 
-**Thorough:** size first, then extended attributes (cheap metadata check), then full SHA-256 of file contents. Ignores xattrs that macOS writes by itself (`com.apple.quarantine`, `lastuseddate#PS`, `macl`, `provenance`, Spotlight `kMDLabel_*`), so opening a file in another app doesn't make it look changed.
+**Thorough:** size first, then extended attributes (cheap metadata check), then the file contents, compared 1 MB at a time and stopping at the first difference. Ignores xattrs that macOS writes by itself (`com.apple.quarantine`, `lastuseddate#PS`, `macl`, `provenance`, Spotlight `kMDLabel_*`), so opening a file in another app doesn't make it look changed.
 
 **Date Only (Archive):** modification date only — size differences are logged as warnings (`[SIZE DIFF]`) but do not trigger a copy.
 
