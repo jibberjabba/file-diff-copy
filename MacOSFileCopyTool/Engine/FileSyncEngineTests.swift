@@ -308,7 +308,7 @@ final class FileSyncEngineTests: XCTestCase {
 
         // Date Only would never retry a leftover partial (its date is newer), so
         // the retry succeeding here proves nothing was left in the way.
-        let retry = await run(mode: .archive)
+        let retry = await run(mode: .dateOnly)
         XCTAssertEqual(retry.copiedCount, 1)
         XCTAssertEqual(try read(destFile), "brand new")
     }

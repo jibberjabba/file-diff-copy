@@ -102,14 +102,14 @@ struct SyncProgress {
 enum ComparisonMode: CaseIterable, Hashable {
     case fast
     case thorough
-    case archive
+    case dateOnly
     case mirror
 
     var label: String {
         switch self {
         case .fast:     return "Fast"
         case .thorough: return "Thorough"
-        case .archive:  return "Date Only"
+        case .dateOnly: return "Date Only"
         case .mirror:   return "Mirror"
         }
     }
@@ -120,7 +120,7 @@ enum ComparisonMode: CaseIterable, Hashable {
             return "Size + modification date"
         case .thorough:
             return "Byte-by-byte content + extended attributes — detects any content or metadata change"
-        case .archive:
+        case .dateOnly:
             return "Modification date only — copy when source is newer; identical dates skip regardless of size"
         case .mirror:
             return "Fast copy, then permanently deletes destination files not present in source"
@@ -701,7 +701,7 @@ final class FileSyncEngine {
             if !xattrsMatch(source: source, destination: destination) { return .xattrChanged }
             return try contentsDiffer(source, destination) ? .contentDiffered : nil
 
-        case .archive:
+        case .dateOnly:
             // Date only — size differences intentionally ignored.
             let keys: Set<URLResourceKey> = [.contentModificationDateKey]
             let srcValues = try source.resourceValues(forKeys: keys)
@@ -720,7 +720,7 @@ final class FileSyncEngine {
         case .fast, .mirror, .thorough:
             return try destinationIsNewer(source: source, destination: destination) ? .newerDestination : nil
 
-        case .archive:
+        case .dateOnly:
             if try destinationIsNewer(source: source, destination: destination) { return .newerDestination }
             let keys: Set<URLResourceKey> = [.contentModificationDateKey, .fileSizeKey]
             let srcValues = try source.resourceValues(forKeys: keys)
