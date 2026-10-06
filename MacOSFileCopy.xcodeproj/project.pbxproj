@@ -22,6 +22,7 @@
 		AA800003000000000000001A /* FileSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100007000000000000001A /* FileSyncEngine.swift */; };
 		AA800004000000000000001A /* FileSyncViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100006000000000000001A /* FileSyncViewModel.swift */; };
 		AA800005000000000000001A /* BookmarkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008000000000000001A /* BookmarkManager.swift */; };
+		AA800006000000000000001A /* BookmarkManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA810009000000000000001A /* BookmarkManagerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +34,7 @@
 		AA100006000000000000001A /* FileSyncViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSyncViewModel.swift; sourceTree = "<group>"; };
 		AA100007000000000000001A /* FileSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSyncEngine.swift; sourceTree = "<group>"; };
 		AA100008000000000000001A /* BookmarkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkManager.swift; sourceTree = "<group>"; };
+		AA810009000000000000001A /* BookmarkManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkManagerTests.swift; sourceTree = "<group>"; };
 		AA100009000000000000001A /* MacOSFileCopyTool.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacOSFileCopyTool.entitlements; sourceTree = "<group>"; };
 		AA10000A000000000000001A /* MirrorConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorConfirmationView.swift; sourceTree = "<group>"; };
 		AA100010000000000000001A /* File Diff Copy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "File Diff Copy.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -116,6 +118,7 @@
 			isa = PBXGroup;
 			children = (
 				AA100008000000000000001A /* BookmarkManager.swift */,
+				AA810009000000000000001A /* BookmarkManagerTests.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -239,6 +242,7 @@
 				AA800003000000000000001A /* FileSyncEngine.swift in Sources */,
 				AA800004000000000000001A /* FileSyncViewModel.swift in Sources */,
 				AA800005000000000000001A /* BookmarkManager.swift in Sources */,
+				AA800006000000000000001A /* BookmarkManagerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -117,4 +117,26 @@ final class FileSyncViewModelTests: XCTestCase {
         XCTAssertEqual(vm.copiedCount, fileCount)
         XCTAssertEqual(vm.logEntries.count, fileCount)
     }
+
+    // MARK: - Low: a cancelled run doesn't show a full progress bar
+
+    func testCancelledRunKeepsPartialProgress() async throws {
+        let vm = makeViewModel()
+        vm.startSync()
+        vm.cancelSync()
+        await vm.activeTask?.value
+
+        XCTAssertTrue(vm.isComplete)
+        XCTAssertEqual(vm.statusMessage, "Cancelled.")
+        XCTAssertLessThan(vm.progress, 1.0)
+        XCTAssertLessThan(vm.copiedCount, fileCount)
+    }
+
+    func testFinishedRunShowsFullProgress() async throws {
+        let vm = makeViewModel()
+        vm.startSync()
+        await vm.activeTask?.value
+
+        XCTAssertEqual(vm.progress, 1.0)
+    }
 }

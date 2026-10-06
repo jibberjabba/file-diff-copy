@@ -30,7 +30,7 @@ MacOSFileCopyTool/
 └── MacOSFileCopyTool.entitlements
 ```
 
-**Tests:** `MacOSFileCopyToolTests` is an unhosted XCTest bundle. It compiles `FileSyncEngine.swift`, `FileSyncViewModel.swift` and `BookmarkManager.swift` directly (no `@testable import`, no app launch, no sandbox). Test files live beside the file they cover and are members of the test target only. Run them with:
+**Tests:** `MacOSFileCopyToolTests` is an unhosted XCTest bundle (`FileSyncEngineTests`, `FileSyncViewModelTests`, `BookmarkManagerTests`). It compiles `FileSyncEngine.swift`, `FileSyncViewModel.swift` and `BookmarkManager.swift` directly (no `@testable import`, no app launch, no sandbox). Test files live beside the file they cover and are members of the test target only. Run them with:
 `xcodebuild -project MacOSFileCopy.xcodeproj -scheme MacOSFileCopy test`
 
 ---
@@ -112,7 +112,7 @@ xattr checking was removed from Fast mode. On a NAS, extended attributes change 
 `.disabled()` on the comparison-mode Picker tears down AppKit tooltip tracking areas, so hover tooltips stop working once a sync starts. The fix: remove `.disabled()` entirely, use a binding that no-ops the setter when `isRunning`, and apply `.opacity(0.5)` for the visual disabled appearance. Tracking areas are never torn down so tooltips always work.
 
 **Window height constants on `AppDelegate`**
-`compactHeight` and `expandedHeight` are `static let` on `AppDelegate`, referenced by both `AppDelegate` and `ContentView` (via `AppDelegate.compactHeight`). Adding or removing a permanently-visible row in the folder-picker `GroupBox` requires bumping `compactHeight` to match the new natural content height. Current value: `270`.
+`compactHeight` and `expandedHeight` are `static let` on `AppDelegate`, referenced by both `AppDelegate` and `ContentView` (via `AppDelegate.compactHeight`). Adding or removing a permanently-visible row in the folder-picker `GroupBox` requires bumping `compactHeight` to match the new natural content height. Current value: `240`.
 
 `setWindowHeight` sets the **NSWindow frame** height (which includes the title bar). The VStack frame uses `.frame(minWidth: 600)` with no `minHeight` — removing `minHeight` was intentional: passing `compactHeight` as the SwiftUI content minimum height caused SwiftUI to request `compactHeight + ~32px (title bar)` from the window, making the window 32px taller than intended. Without `minHeight`, SwiftUI defers to `setWindowHeight` rather than fighting it.
 
@@ -135,6 +135,17 @@ Anomalies increment `warningCount` (not `skippedCount`) and appear as orange `[N
 
 **Log entry cap and the full log file (`FileSyncEngine.RunLog`)**
 The on-screen log is capped at `maxLogEntries` (20,000). When the cap is reached a `[NOTE]` sentinel entry is added and later entries are not shown. Every entry is also written, uncapped, to a per-run text file in the app's temporary directory (`FileDiffCopy-<uuid>.log`, passed as `sync(logFile:)`). **Save Log** copies that file (`FileSyncViewModel.writeLog(to:)`), so the export is complete even when the screen log was truncated. It falls back to the on-screen entries only if the file couldn't be created. The file is deleted when the next run starts or the session is reset. The counts (copiedCount etc.) were never capped.
+
+**Bookmarks need the app-scope entitlement; stale ones are refreshed inside an access scope (`BookmarkManager`)**
+`com.apple.security.files.bookmarks.app-scope` is in the entitlements because Apple documents it as required for security-scoped bookmarks. In a sandboxed probe on macOS 26.6.2, creating a bookmark for a non-open-panel URL failed without it; the app's own open-panel bookmarks happened to save anyway. When `restore` finds a bookmark stale (the folder was renamed or moved), it re-saves it between `startAccessingSecurityScopedResource()` and `stop…`. The unsandboxed test runner can't tell whether that access scope is needed, but in the sandbox a security-scoped URL must be opened before a new bookmark can be made from it. `BookmarkManager.defaults` can be injected so tests use a throwaway suite.
+
+**Logging (`os.Logger`, subsystem `com.jeff.filecopy`)**
+Paths, error messages and reasons are logged with `privacy: .public`. `os.Logger` redacts interpolated strings by default, so release logs used to read `<private> folder unavailable: <private>`. To watch the app, run `log stream --predicate 'subsystem == "com.jeff.filecopy"'`; in zsh, use `/usr/bin/log` because `log` is a shell builtin. Errors are persisted; debug lines only show while streaming. A Save Log failure also shows an alert.
+
+**xattr reads never fail open (`FileSyncEngine.xattrNames` / `xattrValue`)**
+An `ERANGE` from the list changing between `listxattr`'s size call and its read is retried. `ENOTSUP` (a filesystem without xattrs) means none. Any other failure throws, so the file is logged as `[ERROR]`. It used to return an empty dictionary, and two empty dictionaries compare equal, which hid real differences. `listXattrNames` can be injected so tests can simulate the race.
+
+**A cancelled run keeps its progress bar where it stopped** — the completion block sets `progress = 1.0` only when the run wasn't cancelled.
 
 **`BookmarkManager.RestoreResult`**
 `BookmarkManager.restore(key:)` returns `.success(URL)`, `.notStored`, or `.unavailable` (bookmark exists but the volume can't be resolved). The ViewModel uses this to set `sourceBookmarkUnavailable` / `destinationBookmarkUnavailable` flags, which surface an orange warning in the UI rather than silently showing "No folder selected."
@@ -188,6 +199,7 @@ The icon is generated by a Swift CoreGraphics script (`gen_icon.swift`) in each 
 | 2026-10-06 | Thorough content compare (M2) | SHA-256 of both files replaced by a 1 MB chunk comparison that stops at the first difference, with an `autoreleasepool` per chunk (peak memory for 1 GB files: ~2 GB → 15 MB). Short SMB reads handled. `CopyReason.checksumDiffered` renamed `.contentDiffered`. 44 tests. |
 | 2026-10-06 | Cancel mid-file (M3) | Copies go through `copyfile(3)` with a per-chunk cancel callback, and the Thorough comparison checks cancel per chunk. Cancel now stops a large copy within ~0.1 s (measured on arrakis), leaving the destination as it was. Same flags as `copyItem`, so clones, metadata and SMB speed are unchanged. 50 tests. |
 | 2026-10-06 | Mirror removes emptied folders (M4) | Folders left empty by a Mirror run's confirmed deletions are removed with `rmdir` (deepest first; `.DS_Store` ignored; folders in the source or with other content kept), and Preview reports them. Fixture 11's folder/file collision now resolves on the second Mirror run. Checked on TestFixtures and arrakis. 55 tests. |
+| 2026-10-06 | Review complete (M5, M6, Low) | App-scope bookmark entitlement; stale bookmarks re-saved inside an access scope (+ `BookmarkManagerTests`). Logger output public instead of `<private>`, subsystem `com.jeff.filecopy`, `print` replaced, Save Log failure alert. Unreadable xattr lists are an error, not a match. Cancelled runs keep partial progress. `ComparisonMode.archive` renamed `.dateOnly`. All review items closed. 64 tests. |
 
 **Current phase:** Feature-complete, all modes tested and passing. Release build in `~/Applications/File Diff Copy.app`.
 **Next step:** Re-run test fixtures against the macOS 13 build to confirm no regressions, then run a real-world sync against a NAS to validate Mirror deletion, Preview mode, xattr comparison, and anomaly detection under network I/O conditions.

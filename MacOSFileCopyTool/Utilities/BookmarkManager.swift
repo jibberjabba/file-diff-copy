@@ -1,6 +1,12 @@
 import Foundation
+import os
 
 enum BookmarkManager {
+
+    private static let logger = Logger(subsystem: "com.jeff.filecopy", category: "BookmarkManager")
+
+    /// Where bookmarks are stored. Tests point this at a throwaway suite.
+    static var defaults: UserDefaults = .standard
 
     static let sourceKey      = "sourceBookmarkData"
     static let destinationKey = "destinationBookmarkData"
@@ -18,14 +24,14 @@ enum BookmarkManager {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            UserDefaults.standard.set(data, forKey: key)
+            defaults.set(data, forKey: key)
         } catch {
-            print("BookmarkManager: Failed to save bookmark for \(url.path): \(error.localizedDescription)")
+            logger.error("Failed to save bookmark for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
     static func restore(key: String) -> RestoreResult {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return .notStored }
+        guard let data = defaults.data(forKey: key) else { return .notStored }
 
         do {
             var isStale = false
@@ -36,11 +42,15 @@ enum BookmarkManager {
                 bookmarkDataIsStale: &isStale
             )
             if isStale {
+                // A security-scoped URL must be opened before a fresh bookmark
+                // can be made from it.
+                let accessing = url.startAccessingSecurityScopedResource()
+                defer { if accessing { url.stopAccessingSecurityScopedResource() } }
                 save(url: url, key: key)
             }
             return .success(url)
         } catch {
-            print("BookmarkManager: Failed to restore bookmark for key '\(key)': \(error.localizedDescription)")
+            logger.error("Failed to restore bookmark '\(key, privacy: .public)': \(error.localizedDescription, privacy: .public)")
             return .unavailable
         }
     }

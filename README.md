@@ -51,7 +51,7 @@ Sync runs as a Swift `async` task so the UI stays responsive. `Task.yield()` is 
 
 **Thorough:** size first, then extended attributes (cheap metadata check), then the file contents, compared 1 MB at a time and stopping at the first difference. Ignores xattrs that macOS writes by itself (`com.apple.quarantine`, `lastuseddate#PS`, `macl`, `provenance`, Spotlight `kMDLabel_*`), so opening a file in another app doesn't make it look changed.
 
-**Date Only (Archive):** modification date only — size differences are logged as warnings (`[SIZE DIFF]`) but do not trigger a copy.
+**Date Only:** modification date only — size differences are logged as warnings (`[SIZE DIFF]`) but do not trigger a copy.
 
 ## Log entry types
 

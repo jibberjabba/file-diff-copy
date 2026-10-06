@@ -102,14 +102,14 @@ struct SyncProgress {
 enum ComparisonMode: CaseIterable, Hashable {
     case fast
     case thorough
-    case archive
+    case dateOnly
     case mirror
 
     var label: String {
         switch self {
         case .fast:     return "Fast"
         case .thorough: return "Thorough"
-        case .archive:  return "Date Only"
+        case .dateOnly: return "Date Only"
         case .mirror:   return "Mirror"
         }
     }
@@ -120,7 +120,7 @@ enum ComparisonMode: CaseIterable, Hashable {
             return "Size + modification date"
         case .thorough:
             return "Byte-by-byte content + extended attributes — detects any content or metadata change"
-        case .archive:
+        case .dateOnly:
             return "Modification date only — copy when source is newer; identical dates skip regardless of size"
         case .mirror:
             return "Fast copy, then permanently deletes destination files not present in source"
@@ -197,7 +197,7 @@ enum MirrorSafetyError: LocalizedError, Equatable {
 /// Log entries use `.wouldCopy` / `.wouldDelete` in dry-run mode.
 final class FileSyncEngine {
 
-    private let logger = Logger(subsystem: "com.macos.filecopytool", category: "FileSyncEngine")
+    private let logger = Logger(subsystem: "com.jeff.filecopy", category: "FileSyncEngine")
 
     private let cancelFlag = OSAllocatedUnfairLock(initialState: false)
 
@@ -287,7 +287,7 @@ final class FileSyncEngine {
             appendLog(LogEntry(action: .error("\(label) folder is unavailable"), relativePath: root.path))
             progress.currentFile = "\(label) folder is unavailable."
             await report(force: true)
-            logger.error("\(label) folder unavailable: \(root.path)")
+            logger.error("\(label, privacy: .public) folder unavailable: \(root.path, privacy: .public)")
             return
         }
 
@@ -295,7 +295,7 @@ final class FileSyncEngine {
         for failure in sourceScan.failures {
             progress.errorCount += 1
             appendLog(LogEntry(action: .error(failure.message), relativePath: failure.path))
-            logger.error("Could not read \(failure.path): \(failure.message)")
+            logger.error("Could not read \(failure.path, privacy: .public): \(failure.message, privacy: .public)")
         }
         for item in sourceScan.ignored {
             progress.ignoredCount += 1
@@ -315,12 +315,13 @@ final class FileSyncEngine {
                 progress.errorCount += 1
                 appendLog(LogEntry(action: .error("Mirror deletions skipped — \(error.localizedDescription)"),
                                    relativePath: "(mirror)"))
-                logger.error("Mirror deletions skipped: \(error.localizedDescription)")
+                logger.error("Mirror deletions skipped: \(error.localizedDescription, privacy: .public)")
             }
         }
 
         progress.totalFiles = sourceScan.files.count + orphans.count
-        logger.debug("Sync started. \(sourceScan.files.count) source files\(dryRun ? " (dry run)" : "").")
+        let runKind = dryRun ? " (dry run)" : ""
+        logger.debug("Sync started. \(sourceScan.files.count) source files\(runKind, privacy: .public).")
 
         for file in sourceScan.files {
             if isCancelled { break }
@@ -338,13 +339,14 @@ final class FileSyncEngine {
                     progress.copiedCount += 1
                     let action: FileSyncAction = dryRun ? .wouldCopy(reason) : .copied(reason)
                     appendLog(LogEntry(action: action, relativePath: relativePath))
-                    logger.debug("\(dryRun ? "Would copy" : "Copied"): \(relativePath) (\(reason))")
+                    let verb = dryRun ? "Would copy" : "Copied"
+                    logger.debug("\(verb, privacy: .public): \(relativePath, privacy: .public) (\(reason, privacy: .public))")
                 } else if let anomaly = try detectAnomaly(source: file.url,
                                                            destination: destURL,
                                                            mode: mode) {
                     progress.warningCount += 1
                     appendLog(LogEntry(action: anomaly, relativePath: relativePath))
-                    logger.debug("Warning \(anomaly) on \(relativePath)")
+                    logger.debug("Warning \(anomaly, privacy: .public) on \(relativePath, privacy: .public)")
                 } else {
                     progress.skippedCount += 1
                     appendLog(LogEntry(action: .skipped, relativePath: relativePath))
@@ -359,7 +361,7 @@ final class FileSyncEngine {
                 progress.errorCount += 1
                 appendLog(
                     LogEntry(action: .error(error.localizedDescription), relativePath: relativePath))
-                logger.error("Error on \(relativePath): \(error.localizedDescription)")
+                logger.error("Error on \(relativePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
             if stopped { break }
 
@@ -394,12 +396,13 @@ final class FileSyncEngine {
                             removed.insert(relativePath)
                             let action: FileSyncAction = dryRun ? .wouldDelete : .deleted
                             appendLog(LogEntry(action: action, relativePath: relativePath))
-                            logger.debug("\(dryRun ? "Would delete" : "Deleted"): \(relativePath)")
+                            let verb = dryRun ? "Would delete" : "Deleted"
+                            logger.debug("\(verb, privacy: .public): \(relativePath, privacy: .public)")
                         } catch {
                             progress.errorCount += 1
                             appendLog(
                                 LogEntry(action: .error(error.localizedDescription), relativePath: relativePath))
-                            logger.error("Delete failed for \(relativePath): \(error.localizedDescription)")
+                            logger.error("Delete failed for \(relativePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
                         }
                     }
                     progress.processedFiles += 1
@@ -524,7 +527,7 @@ final class FileSyncEngine {
             if FileManager.default.createFile(atPath: file.path, contents: nil) {
                 handle = try? FileHandle(forWritingTo: file)
             }
-            if handle == nil { logger.error("Could not create log file at \(file.path)") }
+            if handle == nil { logger.error("Could not create log file at \(file.path, privacy: .public)") }
         }
 
         func append(_ entry: LogEntry) {
@@ -555,7 +558,7 @@ final class FileSyncEngine {
             do {
                 try handle.write(contentsOf: buffer)
             } catch {
-                logger.error("Could not write log file: \(error.localizedDescription)")
+                logger.error("Could not write log file: \(error.localizedDescription, privacy: .public)")
                 self.handle = nil
             }
             buffer = Data()
@@ -698,10 +701,10 @@ final class FileSyncEngine {
             let dstValues = try destination.resourceValues(forKeys: [.fileSizeKey])
             if let srcSize = srcValues.fileSize, let dstSize = dstValues.fileSize,
                srcSize != dstSize { return .sizeChanged }
-            if !xattrsMatch(source: source, destination: destination) { return .xattrChanged }
+            if try !xattrsMatch(source: source, destination: destination) { return .xattrChanged }
             return try contentsDiffer(source, destination) ? .contentDiffered : nil
 
-        case .archive:
+        case .dateOnly:
             // Date only — size differences intentionally ignored.
             let keys: Set<URLResourceKey> = [.contentModificationDateKey]
             let srcValues = try source.resourceValues(forKeys: keys)
@@ -720,7 +723,7 @@ final class FileSyncEngine {
         case .fast, .mirror, .thorough:
             return try destinationIsNewer(source: source, destination: destination) ? .newerDestination : nil
 
-        case .archive:
+        case .dateOnly:
             if try destinationIsNewer(source: source, destination: destination) { return .newerDestination }
             let keys: Set<URLResourceKey> = [.contentModificationDateKey, .fileSizeKey]
             let srcValues = try source.resourceValues(forKeys: keys)
@@ -779,38 +782,67 @@ final class FileSyncEngine {
         return data
     }
 
-    private func xattrsMatch(source: URL, destination: URL) -> Bool {
-        extendedAttributes(of: source) == extendedAttributes(of: destination)
+    private func xattrsMatch(source: URL, destination: URL) throws -> Bool {
+        try extendedAttributes(of: source) == extendedAttributes(of: destination)
     }
 
-    private func extendedAttributes(of url: URL) -> [String: Data] {
+    /// Reads a file's xattr names (`listxattr` semantics). Tests replace it to
+    /// simulate the list changing between the size call and the read.
+    var listXattrNames: (String, UnsafeMutablePointer<CChar>?, Int) -> Int = { path, buffer, size in
+        listxattr(path, buffer, size, XATTR_NOFOLLOW)
+    }
+
+    /// Throws rather than returning an empty dictionary when the xattrs can't be
+    /// read: two empty dictionaries compare equal, which would hide a difference.
+    private func extendedAttributes(of url: URL) throws -> [String: Data] {
         let path = url.path
         var result: [String: Data] = [:]
-
-        let bufSize = listxattr(path, nil, 0, XATTR_NOFOLLOW)
-        guard bufSize > 0 else { return result }
-
-        var nameBuf = [CChar](repeating: 0, count: bufSize)
-        let actualSize = listxattr(path, &nameBuf, bufSize, XATTR_NOFOLLOW)
-        guard actualSize > 0 else { return result }
-
-        var offset = 0
-        while offset < actualSize {
-            let name = nameBuf.withUnsafeBufferPointer { ptr in
-                String(cString: ptr.baseAddress!.advanced(by: offset))
-            }
-            offset += name.utf8.count + 1
-            guard !Self.isIgnoredXattr(name) else { continue }
-
-            let dataSize = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
-            guard dataSize > 0 else { continue }
-
-            var dataBuf = [UInt8](repeating: 0, count: dataSize)
-            guard getxattr(path, name, &dataBuf, dataSize, 0, XATTR_NOFOLLOW) == dataSize else { continue }
-            result[name] = Data(dataBuf)
+        for name in try xattrNames(of: path) where !Self.isIgnoredXattr(name) {
+            if let value = try xattrValue(name, of: path) { result[name] = value }
         }
-
         return result
+    }
+
+    /// The list can grow between asking for its size and reading it (ERANGE);
+    /// that is retried. A filesystem without xattr support has none.
+    private func xattrNames(of path: String) throws -> [String] {
+        for _ in 0..<5 {
+            let size = listXattrNames(path, nil, 0)
+            if size == 0 { return [] }
+            if size < 0 {
+                if errno == ENOTSUP { return [] }
+                throw Self.posixError(errno, path)
+            }
+            var buffer = [CChar](repeating: 0, count: size)
+            let read = listXattrNames(path, &buffer, size)
+            if read >= 0 {
+                return buffer.prefix(read).split(separator: 0)
+                    .map { String(decoding: $0.map { UInt8(bitPattern: $0) }, as: UTF8.self) }
+            }
+            if errno != ERANGE { throw Self.posixError(errno, path) }
+        }
+        throw Self.posixError(ERANGE, path)
+    }
+
+    /// `nil` if the attribute was removed after it was listed.
+    private func xattrValue(_ name: String, of path: String) throws -> Data? {
+        for _ in 0..<5 {
+            let size = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
+            if size < 0 {
+                if errno == ENOATTR { return nil }
+                throw Self.posixError(errno, path)
+            }
+            var buffer = [UInt8](repeating: 0, count: size)
+            let read = getxattr(path, name, &buffer, size, 0, XATTR_NOFOLLOW)
+            if read >= 0 { return Data(buffer.prefix(read)) }
+            if errno == ENOATTR { return nil }
+            if errno != ERANGE { throw Self.posixError(errno, path) }
+        }
+        throw Self.posixError(ERANGE, path)
+    }
+
+    private static func posixError(_ code: Int32, _ path: String) -> NSError {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(code), userInfo: [NSFilePathErrorKey: path])
     }
 
     /// xattrs macOS writes on its own, for bookkeeping rather than as part of the
