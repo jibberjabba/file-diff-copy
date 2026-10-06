@@ -1,6 +1,9 @@
 import Foundation
+import os
 
 enum BookmarkManager {
+
+    private static let logger = Logger(subsystem: "com.jeff.filecopy", category: "BookmarkManager")
 
     static let sourceKey      = "sourceBookmarkData"
     static let destinationKey = "destinationBookmarkData"
@@ -20,7 +23,7 @@ enum BookmarkManager {
             )
             UserDefaults.standard.set(data, forKey: key)
         } catch {
-            print("BookmarkManager: Failed to save bookmark for \(url.path): \(error.localizedDescription)")
+            logger.error("Failed to save bookmark for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -40,7 +43,7 @@ enum BookmarkManager {
             }
             return .success(url)
         } catch {
-            print("BookmarkManager: Failed to restore bookmark for key '\(key)': \(error.localizedDescription)")
+            logger.error("Failed to restore bookmark '\(key, privacy: .public)': \(error.localizedDescription, privacy: .public)")
             return .unavailable
         }
     }

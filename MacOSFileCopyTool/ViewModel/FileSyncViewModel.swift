@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import os
 
 @MainActor
 final class FileSyncViewModel: ObservableObject {
@@ -39,6 +40,8 @@ final class FileSyncViewModel: ObservableObject {
     var isMirrorEnabled: Bool { comparisonMode == .mirror }
 
     // MARK: - Private
+
+    private static let logger = Logger(subsystem: "com.jeff.filecopy", category: "FileSyncViewModel")
 
     /// A fresh engine per run, so cancelling one run can never affect another.
     private var activeEngine: FileSyncEngine?
@@ -159,7 +162,8 @@ final class FileSyncViewModel: ObservableObject {
         do {
             try writeLog(to: url)
         } catch {
-            print("FileSyncViewModel: Failed to save log: \(error.localizedDescription)")
+            Self.logger.error("Failed to save log to \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            NSAlert(error: error).runModal()
         }
     }
 

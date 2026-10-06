@@ -197,7 +197,7 @@ enum MirrorSafetyError: LocalizedError, Equatable {
 /// Log entries use `.wouldCopy` / `.wouldDelete` in dry-run mode.
 final class FileSyncEngine {
 
-    private let logger = Logger(subsystem: "com.macos.filecopytool", category: "FileSyncEngine")
+    private let logger = Logger(subsystem: "com.jeff.filecopy", category: "FileSyncEngine")
 
     private let cancelFlag = OSAllocatedUnfairLock(initialState: false)
 
@@ -287,7 +287,7 @@ final class FileSyncEngine {
             appendLog(LogEntry(action: .error("\(label) folder is unavailable"), relativePath: root.path))
             progress.currentFile = "\(label) folder is unavailable."
             await report(force: true)
-            logger.error("\(label) folder unavailable: \(root.path)")
+            logger.error("\(label, privacy: .public) folder unavailable: \(root.path, privacy: .public)")
             return
         }
 
@@ -295,7 +295,7 @@ final class FileSyncEngine {
         for failure in sourceScan.failures {
             progress.errorCount += 1
             appendLog(LogEntry(action: .error(failure.message), relativePath: failure.path))
-            logger.error("Could not read \(failure.path): \(failure.message)")
+            logger.error("Could not read \(failure.path, privacy: .public): \(failure.message, privacy: .public)")
         }
         for item in sourceScan.ignored {
             progress.ignoredCount += 1
@@ -315,12 +315,13 @@ final class FileSyncEngine {
                 progress.errorCount += 1
                 appendLog(LogEntry(action: .error("Mirror deletions skipped — \(error.localizedDescription)"),
                                    relativePath: "(mirror)"))
-                logger.error("Mirror deletions skipped: \(error.localizedDescription)")
+                logger.error("Mirror deletions skipped: \(error.localizedDescription, privacy: .public)")
             }
         }
 
         progress.totalFiles = sourceScan.files.count + orphans.count
-        logger.debug("Sync started. \(sourceScan.files.count) source files\(dryRun ? " (dry run)" : "").")
+        let runKind = dryRun ? " (dry run)" : ""
+        logger.debug("Sync started. \(sourceScan.files.count) source files\(runKind, privacy: .public).")
 
         for file in sourceScan.files {
             if isCancelled { break }
@@ -338,13 +339,14 @@ final class FileSyncEngine {
                     progress.copiedCount += 1
                     let action: FileSyncAction = dryRun ? .wouldCopy(reason) : .copied(reason)
                     appendLog(LogEntry(action: action, relativePath: relativePath))
-                    logger.debug("\(dryRun ? "Would copy" : "Copied"): \(relativePath) (\(reason))")
+                    let verb = dryRun ? "Would copy" : "Copied"
+                    logger.debug("\(verb, privacy: .public): \(relativePath, privacy: .public) (\(reason, privacy: .public))")
                 } else if let anomaly = try detectAnomaly(source: file.url,
                                                            destination: destURL,
                                                            mode: mode) {
                     progress.warningCount += 1
                     appendLog(LogEntry(action: anomaly, relativePath: relativePath))
-                    logger.debug("Warning \(anomaly) on \(relativePath)")
+                    logger.debug("Warning \(anomaly, privacy: .public) on \(relativePath, privacy: .public)")
                 } else {
                     progress.skippedCount += 1
                     appendLog(LogEntry(action: .skipped, relativePath: relativePath))
@@ -359,7 +361,7 @@ final class FileSyncEngine {
                 progress.errorCount += 1
                 appendLog(
                     LogEntry(action: .error(error.localizedDescription), relativePath: relativePath))
-                logger.error("Error on \(relativePath): \(error.localizedDescription)")
+                logger.error("Error on \(relativePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
             if stopped { break }
 
@@ -394,12 +396,13 @@ final class FileSyncEngine {
                             removed.insert(relativePath)
                             let action: FileSyncAction = dryRun ? .wouldDelete : .deleted
                             appendLog(LogEntry(action: action, relativePath: relativePath))
-                            logger.debug("\(dryRun ? "Would delete" : "Deleted"): \(relativePath)")
+                            let verb = dryRun ? "Would delete" : "Deleted"
+                            logger.debug("\(verb, privacy: .public): \(relativePath, privacy: .public)")
                         } catch {
                             progress.errorCount += 1
                             appendLog(
                                 LogEntry(action: .error(error.localizedDescription), relativePath: relativePath))
-                            logger.error("Delete failed for \(relativePath): \(error.localizedDescription)")
+                            logger.error("Delete failed for \(relativePath, privacy: .public): \(error.localizedDescription, privacy: .public)")
                         }
                     }
                     progress.processedFiles += 1
@@ -524,7 +527,7 @@ final class FileSyncEngine {
             if FileManager.default.createFile(atPath: file.path, contents: nil) {
                 handle = try? FileHandle(forWritingTo: file)
             }
-            if handle == nil { logger.error("Could not create log file at \(file.path)") }
+            if handle == nil { logger.error("Could not create log file at \(file.path, privacy: .public)") }
         }
 
         func append(_ entry: LogEntry) {
@@ -555,7 +558,7 @@ final class FileSyncEngine {
             do {
                 try handle.write(contentsOf: buffer)
             } catch {
-                logger.error("Could not write log file: \(error.localizedDescription)")
+                logger.error("Could not write log file: \(error.localizedDescription, privacy: .public)")
                 self.handle = nil
             }
             buffer = Data()
