@@ -27,15 +27,25 @@ MacOSFileCopyTool/
 │   └── FileSyncEngineTests.swift
 ├── Utilities/
 │   └── BookmarkManager.swift
-└── MacOSFileCopyTool.entitlements
+├── MacOSFileCopyTool.entitlements   # empty on purpose — no App Sandbox
+└── AppConfigurationTests.swift     # fails if the sandbox is re-enabled
 ```
 
-**Tests:** `MacOSFileCopyToolTests` is an unhosted XCTest bundle (`FileSyncEngineTests`, `FileSyncViewModelTests`, `BookmarkManagerTests`). It compiles `FileSyncEngine.swift`, `FileSyncViewModel.swift` and `BookmarkManager.swift` directly (no `@testable import`, no app launch, no sandbox). Test files live beside the file they cover and are members of the test target only. Run them with:
+**Tests:** `MacOSFileCopyToolTests` is an unhosted XCTest bundle (`FileSyncEngineTests`, `FileSyncViewModelTests`, `BookmarkManagerTests`, `AppConfigurationTests`). It compiles `FileSyncEngine.swift`, `FileSyncViewModel.swift` and `BookmarkManager.swift` directly (no `@testable import`, no app launch, no sandbox). Test files live beside the file they cover and are members of the test target only. Run them with:
 `xcodebuild -project MacOSFileCopy.xcodeproj -scheme MacOSFileCopy test`
 
 ---
 
 ## Non-obvious Architectural Decisions
+
+**No App Sandbox (`MacOSFileCopyTool.entitlements` is empty)**
+The App Sandbox stamps `com.apple.quarantine` on every file the app writes, and a sandboxed process isn't allowed to remove it. On 2026-10-06, a script copied by the real app came out with `com.apple.quarantine: 0082;…;File Diff Copy;` although its source had no quarantine. A sandboxed probe got EPERM from `removexattr`, and adding `com.apple.security.files.user-selected.executable` made no difference. Copied apps, scripts and installers therefore triggered Gatekeeper as if they had been downloaded. This is a personal tool that isn't on the App Store, and its job is to write wherever the user points it, so the sandbox was dropped. Hardened runtime stays on; it's the `ENABLE_HARDENED_RUNTIME` build setting. `AppConfigurationTests.testAppIsNotSandboxed` fails if the sandbox entitlement comes back.
+
+Consequences:
+- **Copies:** they carry exactly the source's xattrs, so they're quarantined only if the source was.
+- **Saved folders:** they live in `~/Library/Preferences/com.jeff.filecopy.plist` instead of the sandbox container, so they had to be picked again once after the change.
+- **macOS privacy prompts:** TCC may ask for access to Desktop, Documents or network volumes the first time a saved folder there is used after a relaunch. Choosing a folder in the open panel counts as consent.
+- **Code kept for a possible return:** the security-scoped bookmarks and the `startAccessingSecurityScopedResource()` calls still work without the sandbox (`startAccessing…` just returns false). They are kept so the sandbox could be restored by putting the entitlements back: `app-sandbox`, `files.user-selected.read-write` and `files.bookmarks.app-scope`.
 
 **Mirror deletion safety (`FileSyncEngine.mirrorOrphans`)**
 `fileExists` returns false for "unreachable" as well as "missing", so a file being absent from the source is only trusted when the source scan is complete. Mirror refuses to delete anything (throws `MirrorSafetyError`) if the source folder is unavailable, contains no files, or any item in either tree couldn't be read (the enumerator's `errorHandler` collects these; they are also logged as `[ERROR]` in every mode). A real Mirror run deletes only paths in `confirmedOrphans` (the list the user approved in the sheet) that are still orphaned at run time; `nil` deletes nothing. Before the deletion pass the source is re-checked, and each orphan is re-checked against the source just before it is removed. Trade-off: you can't Mirror an intentionally empty source.
@@ -120,7 +130,7 @@ The outer VStack has no `Spacer()`. A trailing `Spacer()` requests infinite pref
 
 **xattr filter list (`FileSyncEngine.isIgnoredXattr`)**
 Thorough mode doesn't compare xattrs that macOS writes by itself; they are still copied. Those are `com.apple.quarantine`, `com.apple.lastuseddate#PS`, `com.apple.macl`, `com.apple.provenance` and any `com.apple.metadata:kMDLabel_*`. User-meaningful ones are still compared: Finder tags, FinderInfo, WhereFroms, resource forks and third-party xattrs.
-- `quarantine` is essential: the sandbox stamps it on every file the app writes, so without the filter every file would be re-copied on every run.
+- `quarantine` is essential: it differs between source and destination whenever a downloaded source file is copied, and while the app was sandboxed the sandbox stamped it on every file the app wrote, so without the filter every file would be re-copied on every run.
 - `macl` is the other essential one. It records sandbox access grants and is added when a file is opened in a sandboxed app such as Preview or TextEdit. A sandboxed process can't write it when it overwrites a destination file. So a source file opened in Preview was re-copied on *every* Thorough run, forever. This was measured on 2026-10-06 with an ad-hoc-signed sandboxed probe running the engine. The unsandboxed test runner can't reproduce it, because there everything round-trips, on local disk and on SMB alike.
 
 **No window resize when maximised or full-screen**
@@ -136,8 +146,8 @@ Anomalies increment `warningCount` (not `skippedCount`) and appear as orange `[N
 **Log entry cap and the full log file (`FileSyncEngine.RunLog`)**
 The on-screen log is capped at `maxLogEntries` (20,000). When the cap is reached a `[NOTE]` sentinel entry is added and later entries are not shown. Every entry is also written, uncapped, to a per-run text file in the app's temporary directory (`FileDiffCopy-<uuid>.log`, passed as `sync(logFile:)`). **Save Log** copies that file (`FileSyncViewModel.writeLog(to:)`), so the export is complete even when the screen log was truncated. It falls back to the on-screen entries only if the file couldn't be created. The file is deleted when the next run starts or the session is reset. The counts (copiedCount etc.) were never capped.
 
-**Bookmarks need the app-scope entitlement; stale ones are refreshed inside an access scope (`BookmarkManager`)**
-`com.apple.security.files.bookmarks.app-scope` is in the entitlements because Apple documents it as required for security-scoped bookmarks. In a sandboxed probe on macOS 26.6.2, creating a bookmark for a non-open-panel URL failed without it; the app's own open-panel bookmarks happened to save anyway. When `restore` finds a bookmark stale (the folder was renamed or moved), it re-saves it between `startAccessingSecurityScopedResource()` and `stop…`. The unsandboxed test runner can't tell whether that access scope is needed, but in the sandbox a security-scoped URL must be opened before a new bookmark can be made from it. `BookmarkManager.defaults` can be injected so tests use a throwaway suite.
+**Stale bookmarks are refreshed inside an access scope (`BookmarkManager`)**
+While the app was sandboxed, `com.apple.security.files.bookmarks.app-scope` was in the entitlements because Apple documents it as required for security-scoped bookmarks; it went when the sandbox was dropped (see "No App Sandbox"), and must come back with it. In a sandboxed probe on macOS 26.6.2, creating a bookmark for a non-open-panel URL failed without it; the app's own open-panel bookmarks happened to save anyway. When `restore` finds a bookmark stale (the folder was renamed or moved), it re-saves it between `startAccessingSecurityScopedResource()` and `stop…`. The unsandboxed test runner can't tell whether that access scope is needed, but in the sandbox a security-scoped URL must be opened before a new bookmark can be made from it. `BookmarkManager.defaults` can be injected so tests use a throwaway suite.
 
 **Logging (`os.Logger`, subsystem `com.jeff.filecopy`)**
 Paths, error messages and reasons are logged with `privacy: .public`. `os.Logger` redacts interpolated strings by default, so release logs used to read `<private> folder unavailable: <private>`. To watch the app, run `log stream --predicate 'subsystem == "com.jeff.filecopy"'`; in zsh, use `/usr/bin/log` because `log` is a shell builtin. Errors are persisted; debug lines only show while streaming. A Save Log failure also shows an alert.
@@ -200,6 +210,7 @@ The icon is generated by a Swift CoreGraphics script (`gen_icon.swift`) in each 
 | 2026-10-06 | Cancel mid-file (M3) | Copies go through `copyfile(3)` with a per-chunk cancel callback, and the Thorough comparison checks cancel per chunk. Cancel now stops a large copy within ~0.1 s (measured on arrakis), leaving the destination as it was. Same flags as `copyItem`, so clones, metadata and SMB speed are unchanged. 50 tests. |
 | 2026-10-06 | Mirror removes emptied folders (M4) | Folders left empty by a Mirror run's confirmed deletions are removed with `rmdir` (deepest first; `.DS_Store` ignored; folders in the source or with other content kept), and Preview reports them. Fixture 11's folder/file collision now resolves on the second Mirror run. Checked on TestFixtures and arrakis. 55 tests. |
 | 2026-10-06 | Review complete (M5, M6, Low) | App-scope bookmark entitlement; stale bookmarks re-saved inside an access scope (+ `BookmarkManagerTests`). Logger output public instead of `<private>`, subsystem `com.jeff.filecopy`, `print` replaced, Save Log failure alert. Unreadable xattr lists are an error, not a match. Cancelled runs keep partial progress. `ComparisonMode.archive` renamed `.dateOnly`. All review items closed. 64 tests. |
+| 2026-10-06 | App Sandbox removed | The sandbox quarantined every copied file (confirmed on a real copy: `0082;…;File Diff Copy;`) and can't be told not to, so copied apps and scripts tripped Gatekeeper. Entitlements emptied; hardened runtime kept; `AppConfigurationTests` guards it. Saved folders must be re-picked once. 65 tests. |
 
 **Current phase:** Feature-complete, all modes tested and passing. Release build in `~/Applications/File Diff Copy.app`.
 **Next step:** Re-run test fixtures against the macOS 13 build to confirm no regressions, then run a real-world sync against a NAS to validate Mirror deletion, Preview mode, xattr comparison, and anomaly detection under network I/O conditions.
