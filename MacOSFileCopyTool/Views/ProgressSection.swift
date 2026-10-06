@@ -10,6 +10,7 @@ struct ProgressSection: View {
     let skippedCount:  Int
     let warningCount:  Int
     let deletedCount:  Int
+    var ignoredCount:  Int = 0
     let errorCount:    Int
     var isDryRun:      Bool = false
 
@@ -50,6 +51,12 @@ struct ProgressSection: View {
                         systemImage: "trash.fill"
                     )
                     .foregroundColor(.red)
+                }
+
+                if ignoredCount > 0 {
+                    Label("\(ignoredCount) Ignored", systemImage: "eye.slash")
+                        .foregroundColor(.secondary)
+                        .help("Hidden items, symbolic links and special files are not copied — see the log")
                 }
 
                 Label("\(errorCount) Errors", systemImage: "xmark.circle.fill")

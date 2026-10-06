@@ -24,6 +24,7 @@ final class FileSyncViewModel: ObservableObject {
     @Published var skippedCount: Int = 0
     @Published var warningCount: Int = 0
     @Published var deletedCount: Int = 0
+    @Published var ignoredCount: Int = 0
     @Published var errorCount:   Int = 0
     @Published var logEntries:   [LogEntry] = []
 
@@ -139,6 +140,7 @@ final class FileSyncViewModel: ObservableObject {
         skippedCount              = 0
         warningCount              = 0
         deletedCount              = 0
+        ignoredCount              = 0
         errorCount                = 0
         logEntries                = []
         discardFullLog()
@@ -244,6 +246,7 @@ final class FileSyncViewModel: ObservableObject {
         skippedCount  = 0
         warningCount  = 0
         deletedCount  = 0
+        ignoredCount  = 0
         errorCount    = 0
         logEntries    = []
 
@@ -283,6 +286,7 @@ final class FileSyncViewModel: ObservableObject {
                     self.skippedCount  = syncProgress.skippedCount
                     self.warningCount  = syncProgress.warningCount
                     self.deletedCount  = syncProgress.deletedCount
+                    self.ignoredCount  = syncProgress.ignoredCount
                     self.errorCount    = syncProgress.errorCount
                     self.logEntries.append(contentsOf: syncProgress.newLogEntries)
                 }

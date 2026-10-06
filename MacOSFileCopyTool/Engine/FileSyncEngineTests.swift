@@ -478,6 +478,72 @@ final class FileSyncEngineTests: XCTestCase {
         XCTAssertEqual(result.processedFiles, 50)
     }
 
+    // MARK: - H5: items that are never synced are reported, not silently dropped
+
+    /// Source tree with one of each kind of item the app doesn't copy.
+    private func makeSourceWithIgnoredItems() throws {
+        try write("real", to: source.appendingPathComponent("real.txt"))
+        try write("secret", to: source.appendingPathComponent(".env"))
+        try write("git object", to: source.appendingPathComponent(".git/objects/abc"))
+        try write("finder", to: source.appendingPathComponent("sub/.DS_Store"))
+        try write("crash leftover", to: source.appendingPathComponent(".fdc-1234.tmp"))
+        try fm.createSymbolicLink(at: source.appendingPathComponent("link.txt"),
+                                  withDestinationURL: source.appendingPathComponent("real.txt"))
+        XCTAssertEqual(mkfifo(source.appendingPathComponent("pipe").path, 0o644), 0)
+    }
+
+    private func ignoredEntries(_ result: RunResult) -> [String: String] {
+        var map: [String: String] = [:]
+        for entry in result.logEntries {
+            if case .ignored(let reason) = entry.action { map[entry.relativePath] = reason }
+        }
+        return map
+    }
+
+    func testHiddenItemsSymlinksAndSpecialFilesAreReported() async throws {
+        try makeSourceWithIgnoredItems()
+
+        let result = await run()
+
+        XCTAssertEqual(result.copiedCount, 1)
+        XCTAssertEqual(result.ignoredCount, 4)
+        XCTAssertEqual(ignoredEntries(result), [
+            ".env":     IgnoreReason.hiddenFile,
+            ".git":     IgnoreReason.hiddenFolder,   // one entry, contents not walked
+            "link.txt": IgnoreReason.symlink,
+            "pipe":     IgnoreReason.special,
+        ])
+        XCTAssertEqual(result.errorCount, 0)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: destination.path).sorted(), ["real.txt"])
+    }
+
+    func testIgnoredItemsAreReportedInPreview() async throws {
+        try makeSourceWithIgnoredItems()
+
+        let result = await run(dryRun: true)
+
+        XCTAssertEqual(result.ignoredCount, 4)
+        XCTAssertEqual(ignoredEntries(result).count, 4)
+    }
+
+    func testMirrorNeverDeletesHiddenDestinationItems() async throws {
+        try write("a", to: source.appendingPathComponent("a.txt"))
+        let kept = [
+            try write("x", to: destination.appendingPathComponent(".DS_Store")),
+            try write("x", to: destination.appendingPathComponent(".secret")),
+            try write("x", to: destination.appendingPathComponent(".hidden/inner.txt")),
+            try write("x", to: destination.appendingPathComponent(".fdc-crash.tmp")),
+        ]
+        let engine = FileSyncEngine()
+
+        let orphans = try await engine.findOrphans(source: source, destination: destination)
+        let result = await run(mode: .mirror, confirmedOrphans: Set(orphans))
+
+        XCTAssertEqual(orphans, [])
+        XCTAssertEqual(result.deletedCount, 0)
+        for url in kept { XCTAssertTrue(exists(url), url.lastPathComponent) }
+    }
+
     // MARK: - C5: cancellation is sticky
 
     func testCancelledEngineStaysCancelledWhenSyncIsCalled() async throws {

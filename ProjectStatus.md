@@ -31,6 +31,7 @@ Created at `~/Desktop/FileCopyTest/` (2026-05-28). Reset script: `TestFixtures/r
 | `source/subdir/nested_uptodate.txt` | Nested file already in sync |
 | `source/dest_edited.txt` | Destination newer **and** different size → `[NEWER DST]` in every mode, never overwritten (H1, added 2026-10-05) |
 | `source/collision` | Source file vs destination folder `collision/` → `[ERROR]`, folder kept (H2, added 2026-10-05) |
+| `source/.hidden_config`, `source/link_to_new.txt` | Hidden file and symlink → `[IGNORED]` in every mode, never copied, "2 Ignored" counter (H5, added 2026-10-06) |
 
 **Fixture fix (2026-05-28):** `dest_newer.txt` previously had different content sizes (23 vs 48 bytes), causing Fast mode to copy it as "size changed" before reaching anomaly detection. Fixed to use identical 33-byte content in both copies so the size check passes through to date comparison.
 

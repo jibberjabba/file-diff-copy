@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// - Green      → COPIED
 /// - Blue       → WOULD COPY (dry-run preview)
-/// - Gray       → SKIPPED / NOTE
+/// - Gray       → SKIPPED / NOTE / IGNORED
 /// - Orange     → NEWER DST, SIZE DIFF (anomaly warnings)
 /// - Red        → DELETED, WOULD DEL, ERROR
 struct LogView: View {
@@ -53,6 +53,7 @@ struct LogView: View {
         case .newerDestination: return .orange
         case .sizeMismatch:     return .orange
         case .notice(_):        return .secondary
+        case .ignored(_):       return .secondary
         case .error(_):         return .red
         }
     }
