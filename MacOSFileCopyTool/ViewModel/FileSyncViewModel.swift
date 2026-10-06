@@ -298,7 +298,8 @@ final class FileSyncViewModel: ObservableObject {
             guard self.syncGeneration == generation else { return }
             self.isRunning    = false
             self.isComplete   = true
-            self.progress     = 1.0
+            // A cancelled run keeps the bar where it stopped, so it doesn't look finished.
+            if !engine.isCancelled { self.progress = 1.0 }
             self.statusMessage = engine.isCancelled
                 ? "Cancelled."
                 : dryRun
