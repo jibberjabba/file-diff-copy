@@ -871,6 +871,52 @@ final class FileSyncEngineTests: XCTestCase {
         XCTAssertEqual(try read(destination.appendingPathComponent("collision")), "a file")
     }
 
+    // MARK: - Low: an unreadable xattr list is never treated as "no xattrs"
+
+    private func makeSyncedPair() async throws {
+        let src = try write("same", to: source.appendingPathComponent("x.txt"))
+        try setXattr("com.example.note", "hello", on: src)
+        _ = await run(mode: .thorough)
+    }
+
+    func testXattrListThatChangesMidReadIsRetried() async throws {
+        try await makeSyncedPair()
+        let engine = FileSyncEngine()
+        var failedOnce = false
+        engine.listXattrNames = { path, buffer, size in
+            if buffer != nil, !failedOnce { failedOnce = true; errno = ERANGE; return -1 }
+            return listxattr(path, buffer, size, XATTR_NOFOLLOW)
+        }
+
+        let result = await run(engine, mode: .thorough)
+
+        XCTAssertTrue(failedOnce)
+        XCTAssertEqual(result.errorCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+    }
+
+    func testUnreadableXattrsAreAnErrorNotAMatch() async throws {
+        try await makeSyncedPair()
+        let engine = FileSyncEngine()
+        engine.listXattrNames = { _, _, _ in errno = EIO; return -1 }
+
+        let result = await run(engine, mode: .thorough)
+
+        XCTAssertEqual(result.errorCount, 1, "must be reported, not silently counted as matching")
+        XCTAssertEqual(result.skippedCount, 0)
+    }
+
+    func testFilesystemWithoutXattrsStillCompares() async throws {
+        try await makeSyncedPair()
+        let engine = FileSyncEngine()
+        engine.listXattrNames = { _, _, _ in errno = ENOTSUP; return -1 }
+
+        let result = await run(engine, mode: .thorough)
+
+        XCTAssertEqual(result.errorCount, 0)
+        XCTAssertEqual(result.skippedCount, 1)
+    }
+
     // MARK: - C5: cancellation is sticky
 
     func testCancelledEngineStaysCancelledWhenSyncIsCalled() async throws {

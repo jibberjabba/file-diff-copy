@@ -698,7 +698,7 @@ final class FileSyncEngine {
             let dstValues = try destination.resourceValues(forKeys: [.fileSizeKey])
             if let srcSize = srcValues.fileSize, let dstSize = dstValues.fileSize,
                srcSize != dstSize { return .sizeChanged }
-            if !xattrsMatch(source: source, destination: destination) { return .xattrChanged }
+            if try !xattrsMatch(source: source, destination: destination) { return .xattrChanged }
             return try contentsDiffer(source, destination) ? .contentDiffered : nil
 
         case .dateOnly:
@@ -779,38 +779,67 @@ final class FileSyncEngine {
         return data
     }
 
-    private func xattrsMatch(source: URL, destination: URL) -> Bool {
-        extendedAttributes(of: source) == extendedAttributes(of: destination)
+    private func xattrsMatch(source: URL, destination: URL) throws -> Bool {
+        try extendedAttributes(of: source) == extendedAttributes(of: destination)
     }
 
-    private func extendedAttributes(of url: URL) -> [String: Data] {
+    /// Reads a file's xattr names (`listxattr` semantics). Tests replace it to
+    /// simulate the list changing between the size call and the read.
+    var listXattrNames: (String, UnsafeMutablePointer<CChar>?, Int) -> Int = { path, buffer, size in
+        listxattr(path, buffer, size, XATTR_NOFOLLOW)
+    }
+
+    /// Throws rather than returning an empty dictionary when the xattrs can't be
+    /// read: two empty dictionaries compare equal, which would hide a difference.
+    private func extendedAttributes(of url: URL) throws -> [String: Data] {
         let path = url.path
         var result: [String: Data] = [:]
-
-        let bufSize = listxattr(path, nil, 0, XATTR_NOFOLLOW)
-        guard bufSize > 0 else { return result }
-
-        var nameBuf = [CChar](repeating: 0, count: bufSize)
-        let actualSize = listxattr(path, &nameBuf, bufSize, XATTR_NOFOLLOW)
-        guard actualSize > 0 else { return result }
-
-        var offset = 0
-        while offset < actualSize {
-            let name = nameBuf.withUnsafeBufferPointer { ptr in
-                String(cString: ptr.baseAddress!.advanced(by: offset))
-            }
-            offset += name.utf8.count + 1
-            guard !Self.isIgnoredXattr(name) else { continue }
-
-            let dataSize = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
-            guard dataSize > 0 else { continue }
-
-            var dataBuf = [UInt8](repeating: 0, count: dataSize)
-            guard getxattr(path, name, &dataBuf, dataSize, 0, XATTR_NOFOLLOW) == dataSize else { continue }
-            result[name] = Data(dataBuf)
+        for name in try xattrNames(of: path) where !Self.isIgnoredXattr(name) {
+            if let value = try xattrValue(name, of: path) { result[name] = value }
         }
-
         return result
+    }
+
+    /// The list can grow between asking for its size and reading it (ERANGE);
+    /// that is retried. A filesystem without xattr support has none.
+    private func xattrNames(of path: String) throws -> [String] {
+        for _ in 0..<5 {
+            let size = listXattrNames(path, nil, 0)
+            if size == 0 { return [] }
+            if size < 0 {
+                if errno == ENOTSUP { return [] }
+                throw Self.posixError(errno, path)
+            }
+            var buffer = [CChar](repeating: 0, count: size)
+            let read = listXattrNames(path, &buffer, size)
+            if read >= 0 {
+                return buffer.prefix(read).split(separator: 0)
+                    .map { String(decoding: $0.map { UInt8(bitPattern: $0) }, as: UTF8.self) }
+            }
+            if errno != ERANGE { throw Self.posixError(errno, path) }
+        }
+        throw Self.posixError(ERANGE, path)
+    }
+
+    /// `nil` if the attribute was removed after it was listed.
+    private func xattrValue(_ name: String, of path: String) throws -> Data? {
+        for _ in 0..<5 {
+            let size = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
+            if size < 0 {
+                if errno == ENOATTR { return nil }
+                throw Self.posixError(errno, path)
+            }
+            var buffer = [UInt8](repeating: 0, count: size)
+            let read = getxattr(path, name, &buffer, size, 0, XATTR_NOFOLLOW)
+            if read >= 0 { return Data(buffer.prefix(read)) }
+            if errno == ENOATTR { return nil }
+            if errno != ERANGE { throw Self.posixError(errno, path) }
+        }
+        throw Self.posixError(ERANGE, path)
+    }
+
+    private static func posixError(_ code: Int32, _ path: String) -> NSError {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(code), userInfo: [NSFilePathErrorKey: path])
     }
 
     /// xattrs macOS writes on its own, for bookkeeping rather than as part of the
