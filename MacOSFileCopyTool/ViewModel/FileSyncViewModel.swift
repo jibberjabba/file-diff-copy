@@ -18,6 +18,9 @@ final class FileSyncViewModel: ObservableObject {
     @Published var isDryRun:       Bool = false
     @Published var syncHasStarted: Bool = false
     @Published var isPreparing:    Bool = false
+    /// Bumped each time a copy or Preview run begins, including a confirmed
+    /// Mirror. ContentView watches it to put the window back to its default size.
+    @Published private(set) var runStartCount = 0
     @Published var progress:   Double = 0
     @Published var statusMessage: String = ""
 
@@ -253,6 +256,7 @@ final class FileSyncViewModel: ObservableObject {
         isComplete     = false
         isDryRun       = dryRun
         syncHasStarted = false
+        runStartCount += 1
         isPreparing    = false
         progress       = 0
 

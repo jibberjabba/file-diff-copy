@@ -87,6 +87,48 @@ final class FileSyncViewModelTests: XCTestCase {
         XCTAssertFalse(vm.isScanning)
     }
 
+    // MARK: - Window reset on each run
+
+    func testStartAndPreviewEachSignalANewRun() async throws {
+        let vm = makeViewModel()
+        XCTAssertEqual(vm.runStartCount, 0)
+
+        vm.startSync()
+        XCTAssertEqual(vm.runStartCount, 1, "Start must signal the window to reset")
+        await vm.activeTask?.value
+
+        vm.startPreview()
+        XCTAssertEqual(vm.runStartCount, 2, "Preview must signal the window to reset")
+        await vm.activeTask?.value
+    }
+
+    func testMirrorSignalsANewRunOnlyOnceConfirmed() async throws {
+        let vm = makeViewModel()
+        vm.comparisonMode = .mirror
+
+        // The scan keeps the last log on screen, so the window stays put.
+        vm.startSync()
+        await vm.activeTask?.value
+        XCTAssertTrue(vm.pendingMirrorConfirmation)
+        XCTAssertEqual(vm.runStartCount, 0)
+
+        vm.cancelMirror()
+        XCTAssertEqual(vm.runStartCount, 0, "Cancelling the sheet starts nothing")
+
+        vm.startSync()
+        await vm.activeTask?.value
+        vm.confirmMirror()
+        XCTAssertEqual(vm.runStartCount, 1)
+        await vm.activeTask?.value
+    }
+
+    func testRunWithoutFoldersDoesNotSignal() {
+        let vm = makeViewModel()
+        vm.destinationURL = nil
+        vm.startPreview()
+        XCTAssertEqual(vm.runStartCount, 0)
+    }
+
     // MARK: - H3 / H4
 
     func testSavedLogIncludesEntriesPastTheScreenCap() async throws {
