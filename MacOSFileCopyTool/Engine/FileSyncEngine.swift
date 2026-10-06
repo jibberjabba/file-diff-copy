@@ -157,11 +157,15 @@ enum IgnoreReason {
 /// Per-file errors the engine raises itself (reported in the log like I/O errors).
 enum SyncFileError: LocalizedError, Equatable {
     case destinationIsFolder
+    /// The run was cancelled part-way through this file's copy or comparison.
+    case cancelled
 
     var errorDescription: String? {
         switch self {
         case .destinationIsFolder:
             return "a folder with this name exists at the destination — not replaced"
+        case .cancelled:
+            return "cancelled"
         }
     }
 }
@@ -208,8 +212,13 @@ final class FileSyncEngine {
     }
 
     /// File-copy primitive. Tests replace it to simulate a copy failing part-way.
-    var copyItem: (URL, URL) throws -> Void = { source, destination in
-        try FileManager.default.copyItem(at: source, to: destination)
+    /// The default stops part-way through a file when the run is cancelled.
+    var copyItem: (URL, URL) throws -> Void = { _, _ in }
+
+    init() {
+        copyItem = { [unowned self] source, destination in
+            try Self.copyFile(from: source, to: destination, isCancelled: { self.isCancelled })
+        }
     }
 
     /// Reads up to `count` bytes. Tests replace it to count how much of a file
@@ -315,6 +324,7 @@ final class FileSyncEngine {
 
         for file in sourceScan.files {
             if isCancelled { break }
+            var stopped = false
 
             let relativePath = file.relativePath
             let destURL = destination.appendingPathComponent(relativePath)
@@ -339,12 +349,19 @@ final class FileSyncEngine {
                     progress.skippedCount += 1
                     appendLog(LogEntry(action: .skipped, relativePath: relativePath))
                 }
+            } catch SyncFileError.cancelled {
+                // Stopped part-way: the destination is as it was (performCopy
+                // cleans up), so this is not an error.
+                appendLog(LogEntry(action: .notice("Cancelled during \(relativePath) — left unchanged"),
+                                   relativePath: relativePath))
+                stopped = true
             } catch {
                 progress.errorCount += 1
                 appendLog(
                     LogEntry(action: .error(error.localizedDescription), relativePath: relativePath))
                 logger.error("Error on \(relativePath): \(error.localizedDescription)")
             }
+            if stopped { break }
 
             progress.processedFiles += 1
             await report()
@@ -683,6 +700,7 @@ final class FileSyncEngine {
             }
             if chunkA != chunkB { return true }
             if chunkA.isEmpty { return false }   // both at end of file
+            if isCancelled { throw SyncFileError.cancelled }
         }
     }
 
@@ -746,6 +764,44 @@ final class FileSyncEngine {
 
     static func isIgnoredXattr(_ name: String) -> Bool {
         ignoredXattrNames.contains(name) || ignoredXattrPrefixes.contains { name.hasPrefix($0) }
+    }
+
+    /// Copies one file with `copyfile(3)` — what `FileManager.copyItem` uses —
+    /// with the same result: data, xattrs, ACLs and permissions, as an APFS clone
+    /// where possible, and failing if `destination` exists. Unlike `copyItem`, it
+    /// checks `isCancelled` after every chunk and stops part-way, throwing
+    /// `SyncFileError.cancelled` and leaving a partial file for the caller to remove.
+    /// `clone: false` forces a chunked copy (tests use it; a clone is instant).
+    static func copyFile(from source: URL, to destination: URL, clone: Bool = true,
+                         isCancelled: @escaping () -> Bool) throws {
+        if isCancelled() { throw SyncFileError.cancelled }
+
+        final class Context { let isCancelled: () -> Bool; init(_ c: @escaping () -> Bool) { isCancelled = c } }
+        let context = Context(isCancelled)
+        let callback: copyfile_callback_t = { _, _, _, _, _, ctx in
+            guard let ctx else { return COPYFILE_CONTINUE }
+            return Unmanaged<Context>.fromOpaque(ctx).takeUnretainedValue().isCancelled()
+                ? COPYFILE_QUIT : COPYFILE_CONTINUE
+        }
+
+        guard let state = copyfile_state_alloc() else { throw CocoaError(.fileWriteUnknown) }
+        defer { copyfile_state_free(state) }
+        copyfile_state_set(state, UInt32(COPYFILE_STATE_STATUS_CB), unsafeBitCast(callback, to: UnsafeRawPointer.self))
+        copyfile_state_set(state, UInt32(COPYFILE_STATE_STATUS_CTX), Unmanaged.passUnretained(context).toOpaque())
+
+        var flags = copyfile_flags_t(COPYFILE_ACL | COPYFILE_STAT | COPYFILE_XATTR | COPYFILE_DATA
+                                     | COPYFILE_EXCL | COPYFILE_NOFOLLOW_SRC)
+        if clone { flags |= copyfile_flags_t(COPYFILE_CLONE) }
+
+        let result = withExtendedLifetime(context) {
+            copyfile(source.path, destination.path, state, flags)
+        }
+        guard result != 0 else { return }
+        let code = errno
+        if code == ECANCELED || isCancelled() { throw SyncFileError.cancelled }
+        if code == EEXIST { throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: destination.path]) }
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(code),
+                      userInfo: [NSFilePathErrorKey: destination.path])
     }
 
     private func performCopy(source: URL, destination: URL) throws {
