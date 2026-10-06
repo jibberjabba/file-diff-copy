@@ -23,6 +23,7 @@
 		AA800004000000000000001A /* FileSyncViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100006000000000000001A /* FileSyncViewModel.swift */; };
 		AA800005000000000000001A /* BookmarkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100008000000000000001A /* BookmarkManager.swift */; };
 		AA800006000000000000001A /* BookmarkManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA810009000000000000001A /* BookmarkManagerTests.swift */; };
+		AA80000A000000000000001A /* AppConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA81000A000000000000001A /* AppConfigurationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		AA100008000000000000001A /* BookmarkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkManager.swift; sourceTree = "<group>"; };
 		AA810009000000000000001A /* BookmarkManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkManagerTests.swift; sourceTree = "<group>"; };
 		AA100009000000000000001A /* MacOSFileCopyTool.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacOSFileCopyTool.entitlements; sourceTree = "<group>"; };
+		AA81000A000000000000001A /* AppConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigurationTests.swift; sourceTree = "<group>"; };
 		AA10000A000000000000001A /* MirrorConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorConfirmationView.swift; sourceTree = "<group>"; };
 		AA100010000000000000001A /* File Diff Copy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "File Diff Copy.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA100011000000000000001A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -81,6 +83,7 @@
 				AA000006000000000000001A /* Utilities */,
 				AA100011000000000000001A /* Assets.xcassets */,
 				AA100009000000000000001A /* MacOSFileCopyTool.entitlements */,
+				AA81000A000000000000001A /* AppConfigurationTests.swift */,
 			);
 			path = MacOSFileCopyTool;
 			sourceTree = "<group>";
@@ -243,6 +246,7 @@
 				AA800004000000000000001A /* FileSyncViewModel.swift in Sources */,
 				AA800005000000000000001A /* BookmarkManager.swift in Sources */,
 				AA800006000000000000001A /* BookmarkManagerTests.swift in Sources */,
+				AA80000A000000000000001A /* AppConfigurationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

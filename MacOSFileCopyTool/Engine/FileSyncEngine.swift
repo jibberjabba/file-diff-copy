@@ -848,7 +848,7 @@ final class FileSyncEngine {
     /// xattrs macOS writes on its own, for bookkeeping rather than as part of the
     /// file. They are still copied; they just never make Thorough re-copy a file.
     private static let ignoredXattrNames: Set<String> = [
-        "com.apple.quarantine",       // Gatekeeper; the sandbox also stamps it on every file the app writes
+        "com.apple.quarantine",       // Gatekeeper; differs whenever a downloaded file is copied
         "com.apple.lastuseddate#PS",  // Launch Services, updated whenever the file is opened
         "com.apple.macl",             // sandbox access grants, added when the file is opened in a sandboxed app
         "com.apple.provenance",       // Gatekeeper's record of the app that created the file

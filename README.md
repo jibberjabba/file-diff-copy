@@ -20,7 +20,8 @@ Compares source and destination folders and copies files that are new or changed
 - **Mirror confirmation** — before any deletions, shows the list of orphaned files for review. Folders that those deletions leave empty are removed too, but a folder that was already empty, still exists in the source, or still holds other files (hidden ones included) is kept
 - **Cancel** — graceful stop mid-sync; partial progress is preserved
 - **Save log** — export the full operation log to a `.txt` file
-- **Bookmark persistence** — source and destination folders are remembered between launches via security-scoped bookmarks
+- **Bookmark persistence** — source and destination folders are remembered between launches via bookmarks
+- **Not sandboxed** — the App Sandbox would quarantine every file the app copies (so copied apps and scripts would look downloaded), so it is off; hardened runtime is on. macOS may ask once for access to Desktop, Documents or network volumes
 
 ## Project structure
 
