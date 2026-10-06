@@ -4,12 +4,14 @@
 | Item | Status |
 |------|--------|
 | Xcode build (Debug) | PASSED — `** BUILD SUCCEEDED **` (2026-05-28) |
-| Xcode build (Release) | PASSED — `** BUILD SUCCEEDED **` (2026-06-01) |
+| Xcode build (Release) | PASSED — `** BUILD SUCCEEDED **` (2026-10-06, `main` @ `bf001b4`, clean build, no Swift warnings) |
+| Unit tests | 65 passing — `xcodebuild -project MacOSFileCopy.xcodeproj -scheme MacOSFileCopy test` (2026-10-06) |
+| Signing | Team `6HZ82RF7UX`, hardened runtime on, **no App Sandbox** (since 2026-10-06; see CLAUDE.md "No App Sandbox") |
 | App name | **File Diff Copy** (scheme: `MacOSFileCopy`, bundle: `File Diff Copy.app`) |
 | App launch | CONFIRMED — compact window (~270px), Compare radio group visible |
 | Deployment target | macOS 13.0 Ventura (lowered from 26.0 on 2026-05-28) |
 | AccentColor warning | Fixed — `AccentColor.colorset` added to `Assets.xcassets` (2026-05-28) |
-| Release location | `~/Applications/File Diff Copy.app` |
+| Release location | `~/Applications/File Diff Copy.app` (installed 2026-10-06; launches and quits cleanly) |
 | Project build copies | `build/Debug/` and `build/Release/` (gitignored) |
 
 ---
@@ -101,7 +103,8 @@ Created at `~/Desktop/FileCopyTest/` (2026-05-28). Reset script: `TestFixtures/r
 
 ## Blockers / Notes
 - Test fixtures are one-shot: once a sync runs, destination state changes. Run `TestFixtures/reset_fixtures.sh` before each isolated mode test.
-- Test results above were recorded on 2026-05-28 against the macOS 26 build. The deployment target was subsequently lowered to macOS 13 and `onChange` syntax was updated. Re-run all fixture tests to confirm results still hold.
+- Test results above were recorded on 2026-05-28 against the macOS 26 build. On 2026-10-05/06 every mode, plus a Mirror preview, was re-run against fresh fixtures with the macOS 13-target build: through the engine and the ViewModel, and on the arrakis NAS over SMB. All results matched, apart from the intended changes listed below.
+- If Xcode offers "Update to recommended settings", don't accept the deployment-target change: it raises the target to the current macOS, which drops support for 13–15.
 
 ---
 
@@ -120,6 +123,23 @@ Created at `~/Desktop/FileCopyTest/` (2026-05-28). Reset script: `TestFixtures/r
 
 ---
 
+## Code Review Fixes (2026-10-05 – 2026-10-06)
+Every item from the 2026-10-05 full-codebase review is fixed and merged (PRs #1–#10), each with regression tests checked to fail without the fix. Details are in CLAUDE.md's design notes and build-status table.
+
+| Area | Change |
+|------|--------|
+| Mirror safety (C1–C3) | Mirror refuses to delete if the source is unavailable, empty or partly unreadable, and deletes only the orphans the user confirmed; symlinked roots and `/private` paths handled |
+| Overwrites (C4, H1, H2) | Overwrites go through a temp file that is swapped in; a newer destination file is never overwritten; a source file never replaces a destination folder |
+| Runs (C5) | One engine per run; a cancelled or abandoned run can't affect the next |
+| Log (H3, H4) | Save Log exports every entry (no 20,000 cap); progress updates throttled and incremental |
+| Ignored items (H5) | Hidden files, symlinks and special files logged as `[IGNORED]` and counted |
+| Thorough (M1, M2) | System-written xattrs (`macl`, `provenance`, Spotlight labels) ignored; byte comparison stops at the first difference (1 GB compare: ~2 GB RAM → 15 MB) |
+| Cancel (M3) | Stops part-way through a large copy (~0.1 s on the NAS) |
+| Mirror folders (M4) | Folders emptied by Mirror's deletions are removed |
+| Bookmarks, logging (M5, M6) | Stale bookmarks refreshed; Console shows paths and errors instead of `<private>` |
+| Low items | Cancelled runs keep partial progress; unreadable xattr lists reported as errors; `.archive` → `.dateOnly` |
+| App Sandbox removed | The sandbox quarantined every copied file (confirmed `0082;…;File Diff Copy;`), so copied apps and scripts tripped Gatekeeper |
+
 ## Next Steps
-1. Re-run all fixture tests against the macOS 13 build to confirm no regressions.
-2. Run a real-world sync against a NAS to validate Mirror deletion, Preview mode, xattr comparison, and anomaly detection under network I/O conditions.
+1. In the installed app, pick Source and Destination again. Without the sandbox, the saved folders aren't carried over.
+2. Confirm that copies are no longer quarantined. Delete `~/Desktop/reset_fixtures.sh`, copy `TestFixtures` with the app, then run `xattr -l ~/Desktop/reset_fixtures.sh` in Terminal; it should print nothing.
