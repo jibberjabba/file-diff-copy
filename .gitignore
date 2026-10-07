@@ -11,3 +11,6 @@ build/
 # Swift Package Manager
 .build/
 .swiftpm/
+
+# Local scratch notes
+/review_prompt.txt
